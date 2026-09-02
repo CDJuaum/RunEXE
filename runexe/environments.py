@@ -10,6 +10,8 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from .graphics import detect_dxvk
+
 METADATA_NAME = ".runexe-environment.json"
 MAX_METADATA_BYTES = 64 * 1024
 
@@ -35,7 +37,11 @@ class EnvironmentInfo:
     source: str | None
     architecture: str | None
     runtime: str | None
+    runtime_path: str | None
     windows_version: str | None
+    dxvk_available: bool | None
+    dxvk_source: str
+    dxvk_components: tuple[str, ...]
     size_bytes: int
     modified_at: str
     ready: bool
@@ -54,6 +60,7 @@ def write_environment_metadata(
     architecture: str,
     runtime: str,
     windows_version: str | None,
+    runtime_path: str | None = None,
 ) -> None:
     """Atomically tag an initialized environment for later management."""
 
@@ -73,6 +80,7 @@ def write_environment_metadata(
         "application": source.stem,
         "architecture": architecture,
         "runtime": runtime,
+        "runtime_path": runtime_path,
         "windows_version": (
             windows_version
             if windows_version is not None
@@ -144,7 +152,7 @@ def discover_environments(
         except OSError:
             continue
         for path in candidates:
-            if not path.is_dir() or path.is_symlink() or path.name.startswith(".runexe-removing-"):
+            if not path.is_dir() or path.is_symlink() or path.name.startswith(".runexe-"):
                 continue
             metadata = _read_metadata(path)
             source = metadata.get("source") if isinstance(metadata.get("source"), str) else None
@@ -158,6 +166,26 @@ def discover_environments(
             except OSError:
                 modified = "unknown"
             last_used = metadata.get("last_used")
+            runtime_path = (
+                metadata.get("runtime_path")
+                if isinstance(metadata.get("runtime_path"), str)
+                else None
+            )
+            if backend == "proton" and runtime_path is None:
+                try:
+                    marker_lines = (
+                        (path / ".runexe-proton")
+                        .read_text(encoding="utf-8", errors="replace")
+                        .splitlines()
+                    )
+                except OSError:
+                    marker_lines = []
+                runtime_path = marker_lines[0] if marker_lines else None
+            dxvk = detect_dxvk(
+                path / "pfx" if backend == "proton" else path,
+                backend=backend,
+                proton_script=Path(runtime_path) if runtime_path else None,
+            )
             result.append(
                 EnvironmentInfo(
                     identifier=f"{backend}:{path.name}",
@@ -175,11 +203,15 @@ def discover_environments(
                         if isinstance(metadata.get("runtime"), str)
                         else None
                     ),
+                    runtime_path=runtime_path,
                     windows_version=(
                         metadata.get("windows_version")
                         if isinstance(metadata.get("windows_version"), str)
                         else None
                     ),
+                    dxvk_available=dxvk.available,
+                    dxvk_source=dxvk.source,
+                    dxvk_components=dxvk.components,
                     size_bytes=directory_size(path),
                     modified_at=last_used if isinstance(last_used, str) else modified,
                     ready=(path / "drive_c").is_dir()

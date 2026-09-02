@@ -94,6 +94,12 @@ More compatibility data is one of the long-term goals of the project (see [Roadm
 - **Application library** - reopens recent software and restores its last launch choices without sharing custom prefixes between apps
 - **Environment manager** - inventories RunEXE-owned Wine/Proton environments, reports disk use, opens their folders, and removes only validated managed paths
 - **Support report export** - saves the current analysis, compatibility decision, host state, launch preset, environment inventory, and activity log as JSON
+- **Graphics readiness** - identifies DirectX translation paths, probes Vulkan GPUs, and detects DXVK in Wine prefixes and Proton runtimes
+- **Proton tuning presets** - applies temporary diagnostic, WineD3D, DXVK HUD, fsync, or ntsync overrides per application
+- **Prefix backup and restore** - creates compressed snapshots before removal and restores only into an absent managed location
+- **Expanded Wine configuration** - opens Wine settings, Registry Editor, Control Panel, installed-app management, or Explorer for an exact environment
+- **User-level installation** - one command installs an isolated copy without changing the system Python, and a guarded uninstaller preserves application data
+- **Desktop integration** - adds RunEXE and its logo to freedesktop application menus and the Open With list
 - **Automation-friendly reports** - emits the full analysis and compatibility result as JSON
 
 ## 📋 Requirements
@@ -106,6 +112,61 @@ More compatibility data is one of the long-term goals of the project (see [Roadm
 - [PySide6 Essentials](https://doc.qt.io/qtforpython-6/) (installed automatically with the `gui` extra)
 
 ## 🔧 Installation
+
+### One-command user installation
+
+Install the GUI directly from GitHub without cloning the repository or
+installing pipx:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/main/install.sh | sh
+```
+
+The installer creates an isolated virtual environment under
+`$XDG_DATA_HOME/runexe/app`, exposes `runexe` and `runexe-gui` through
+`~/.local/bin`, and adds RunEXE to the current user's desktop application menu.
+It never runs `sudo` or installs system packages. Run `runexe doctor` afterward
+for distribution-specific Wine, Proton, or GUI-library instructions.
+
+For a console-only or menu-free installation:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/main/install.sh | sh -s -- --cli-only
+curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/main/install.sh | sh -s -- --no-desktop
+```
+
+If you prefer to inspect downloaded scripts before running them, download
+[`install.sh`](install.sh), review it, and execute `sh install.sh` locally.
+
+### pipx installation
+
+If pipx is already installed, it provides the cleanest package-managed setup:
+
+```bash
+pipx install "runexe[gui] @ git+https://github.com/CDJuaum/RunEXE.git"
+runexe desktop install
+```
+
+Upgrade or uninstall that installation with:
+
+```bash
+pipx upgrade runexe
+runexe desktop remove
+pipx uninstall runexe
+```
+
+For an installation created by `install.sh`, rerun the same installer to
+upgrade it. Remove its application files and desktop entry with:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/main/uninstall.sh | sh
+```
+
+The uninstaller deliberately preserves recent-application history and all
+Wine/Proton environments under `$XDG_DATA_HOME/runexe`. Manage those separately
+from the Library page or with `runexe environments`.
+
+### Development installation
 
 ```bash
 git clone https://github.com/cdjuaum/runexe.git
@@ -220,6 +281,8 @@ runexe run path/to/app.exe --backend wine
 runexe run path/to/game.exe --backend proton
 runexe run path/to/game.exe --proton "Proton Experimental"
 runexe run path/to/game.exe --proton ~/.steam/root/compatibilitytools.d/GE-Proton/proton
+runexe run path/to/game.exe --backend proton --tuning diagnostics
+runexe run path/to/game.exe --backend proton --tuning wined3d
 ```
 
 Inspect what is installed and the order in which Proton builds will be selected:
@@ -235,6 +298,8 @@ reports and automated setup):
 runexe doctor
 runexe doctor --no-gui
 runexe doctor --json
+runexe graphics
+runexe graphics --json
 ```
 
 List the local application library and RunEXE-owned environments:
@@ -248,16 +313,25 @@ runexe forget-recent APPLICATION_ID
 
 runexe environments
 runexe environments --json
+runexe configure-environment wine:example-0123456789 --tool winecfg
+runexe configure-environment wine:example-0123456789 --tool regedit
 ```
 
 Environment deletion is intentionally explicit because a prefix can contain
 Windows-side settings or save files. RunEXE accepts only the exact identifier
 from `runexe environments`, validates that it is a direct child of a managed
-RunEXE directory, and requires `--yes`:
+RunEXE directory, requires `--yes`, and creates a restorable backup by default:
 
 ```bash
 runexe remove-environment wine:example-0123456789 --yes
+runexe backups
+runexe restore-backup BACKUP_ID --yes
+runexe remove-backup BACKUP_ID --yes
 ```
+
+Use `--no-backup` only when you deliberately do not want the safety snapshot.
+Backups live under `$XDG_DATA_HOME/runexe/backups`. Restore validates archive
+paths and refuses to replace any existing environment.
 
 Recent application state is stored under
 `$XDG_STATE_HOME/runexe/applications.json` (normally
@@ -319,10 +393,12 @@ runexe version
 - [x] Persistent desktop preferences and keyboard navigation
 - [ ] Desktop notifications
 - [x] Recent-application history and per-app launch presets
-- [ ] More Windows runtime detection
-- [ ] Better DirectX dependency detection
+- [x] More Windows runtime detection
+- [x] Better DirectX dependency detection
 - [x] GPU/Vulkan capability detection
+- [x] DXVK detection
 - [x] More robust application classification
+- [x] Improved Wine configuration
 
 ### v0.5.x
 
@@ -332,17 +408,17 @@ runexe version
 - [x] Managed Wine/Proton environment inventory with disk usage
 - [x] Guarded cleanup restricted to RunEXE-owned environment paths
 - [x] Exportable GUI support reports
-- [ ] Optional Proton runtime tuning presets for advanced troubleshooting
-- [ ] Prefix backup and restore before destructive maintenance
-- [ ] Vulkan/GPU readiness reporting for DirectX translation
-- [ ] Improved Wine configuration
-- [ ] DXVK detection
+- [x] One-command isolated user installer and guarded uninstaller
+- [x] Freedesktop application-menu entry, logo, and Open With registration
+- [x] Optional Proton runtime tuning presets for advanced troubleshooting
+- [x] Prefix backup and restore before destructive maintenance
+- [x] Vulkan/GPU readiness reporting for DirectX translation
 
 ### Future
 
 - [ ] Launch existing Steam titles by App ID
 - [ ] More advanced compatibility scoring
-- [ ] Native Linux application packages and desktop-menu integration
+- [ ] Native `.deb`, RPM, Flatpak, and AppImage packages
 - [ ] Application database / community compatibility data
 
 ## 🛡️ Notes

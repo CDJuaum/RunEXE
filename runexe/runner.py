@@ -17,6 +17,7 @@ from .proton import (
     ProtonInstallation,
     compat_data_path_for,
     proton_environment,
+    proton_tuning_preset,
     proton_winetricks_environment,
     select_proton,
 )
@@ -54,6 +55,7 @@ class PreparedEnvironment:
     launcher: str
     wine_arch: str
     proton_installation: ProtonInstallation | None = None
+    proton_tuning: str = "default"
 
 
 @dataclass(frozen=True)
@@ -92,6 +94,7 @@ def _record_environment(
             architecture=architecture,
             runtime=prepared.runtime_name,
             windows_version=windows_version,
+            runtime_path=prepared.launcher,
         )
     except OSError as error:
         _verbose(verbose, f"Could not update environment metadata: {error}")
@@ -451,6 +454,7 @@ def prepare_environment(
     install_dependencies: bool = True,
     proton: str | Path | None = None,
     winver: str | None = None,
+    proton_tuning: str = "default",
     verbose: bool = False,
 ) -> PreparedEnvironment:
     """Create and configure an isolated environment without launching the app."""
@@ -459,6 +463,10 @@ def prepare_environment(
     executable_path = executable.path.resolve()
 
     if compatibility.backend == "proton":
+        try:
+            tuning = proton_tuning_preset(proton_tuning)
+        except ProtonError as error:
+            raise RunnerError(str(error)) from error
         try:
             installation = select_proton(proton)
         except ProtonError as error:
@@ -473,6 +481,7 @@ def prepare_environment(
             _require_binary("winetricks")
 
         _verbose(verbose, f"Backend: Proton ({installation.name})")
+        _verbose(verbose, f"Proton tuning: {tuning.label}")
         _verbose(verbose, f"Proton script: {installation.script}")
         _verbose(verbose, f"Compat data: {data_path}")
         ensure_proton_prefix(installation, data_path, executable_path, verbose)
@@ -498,10 +507,13 @@ def prepare_environment(
             launcher=str(installation.script),
             wine_arch="win64",
             proton_installation=installation,
+            proton_tuning=tuning.key,
         )
         _record_environment(prepared, executable_path, compatibility.architecture, winver, verbose)
         return prepared
 
+    if proton_tuning != "default":
+        raise RunnerError("Proton tuning presets can only be used with the Proton backend.")
     wine_arch = compatibility.wine_arch
     if wine_arch is None:
         raise RunnerError("No compatible Wine prefix architecture was found.")
@@ -585,7 +597,12 @@ def build_launch_spec(
     if prepared.proton_installation is not None:
         installation = prepared.proton_installation
         command = [str(installation.script), "run", str(executable_path), *(extra_args or [])]
-        env = proton_environment(installation, prepared.path, executable_path)
+        env = proton_environment(
+            installation,
+            prepared.path,
+            executable_path,
+            prepared.proton_tuning,
+        )
     else:
         command = [prepared.launcher, str(executable_path), *(extra_args or [])]
         env = _wine_env(prepared.path, prepared.wine_arch)
@@ -617,6 +634,7 @@ def launch(
     prefix: Path | None = None,
     install_dependencies: bool = True,
     proton: str | Path | None = None,
+    proton_tuning: str = "default",
 ) -> LaunchResult:
     """Provision an isolated Wine/Proton environment and launch the executable."""
 
@@ -628,6 +646,7 @@ def launch(
         prefix=prefix,
         install_dependencies=install_dependencies,
         proton=proton,
+        proton_tuning=proton_tuning,
         winver=winver,
         verbose=verbose,
     )

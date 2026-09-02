@@ -13,11 +13,25 @@ import typer
 
 from runexe import __version__
 from runexe.analyzer import analyze_executable
+from runexe.backups import (
+    BackupError,
+    create_environment_backup,
+    discover_backups,
+    remove_backup,
+    restore_backup,
+)
 from runexe.compatibility import analyze_compatibility
+from runexe.configuration import (
+    CONFIGURATION_TOOLS,
+    ConfigurationError,
+    open_environment_configuration,
+)
+from runexe.desktop import DesktopIntegrationError, install_desktop_entry, remove_desktop_entry
 from runexe.diagnostics import collect_diagnostics
 from runexe.environments import discover_environments, format_size, remove_managed_environment
 from runexe.host import detect_host
 from runexe.library import ApplicationLibrary, LaunchPreset
+from runexe.platform_support import install_hint
 from runexe.profiles import detect_runtime_issue
 from runexe.proton import ProtonError, discover_proton_installations, select_proton
 from runexe.resources import extract_requested_execution_level
@@ -43,6 +57,15 @@ class BackendChoice(str, Enum):
     proton = "proton"
 
 
+class ProtonTuningChoice(str, Enum):
+    default = "default"
+    diagnostics = "diagnostics"
+    wined3d = "wined3d"
+    dxvk_hud = "dxvk-hud"
+    no_fsync = "no-fsync"
+    no_ntsync = "no-ntsync"
+
+
 app = typer.Typer(
     name="runexe",
     help="Inspect Windows software and launch it through Wine or Proton.",
@@ -50,6 +73,11 @@ app = typer.Typer(
     pretty_exceptions_show_locals=False,
     rich_markup_mode="rich",
 )
+desktop_app = typer.Typer(
+    help="Install or remove the per-user Linux desktop-menu entry.",
+    no_args_is_help=True,
+)
+app.add_typer(desktop_app, name="desktop")
 
 
 def _analysis_as_dict(result, compatibility, host) -> dict:
@@ -269,6 +297,13 @@ def run(
         str | None,
         typer.Option("--proton", help="Proton build name, installation directory, or script path."),
     ] = None,
+    tuning: Annotated[
+        ProtonTuningChoice,
+        typer.Option(
+            "--tuning",
+            help="Temporary Proton troubleshooting preset; does not modify the prefix.",
+        ),
+    ] = ProtonTuningChoice.default,
     prefix: Annotated[
         Path | None,
         typer.Option(
@@ -322,6 +357,7 @@ def run(
         preset = LaunchPreset(
             backend=preference.value,
             proton=proton,
+            proton_tuning=tuning.value,
             windows_version=effective_winver,
             dependencies=(
                 "auto" if dependencies is None else "install" if dependencies else "skip"
@@ -379,6 +415,7 @@ def run(
             prefix=prefix,
             install_dependencies=install_dependencies,
             proton=selected_proton.script if selected_proton else proton,
+            proton_tuning=tuning.value,
         )
         if application_library is not None and launch_result.exit_code is not None:
             try:
@@ -581,15 +618,16 @@ def rerun(
         "skip": False,
     }[preset.dependencies]
     run(
-        ctx,
-        source,
-        BackendChoice(preset.backend),
-        preset.proton,
-        Path(preset.prefix) if preset.prefix else None,
-        dependencies,
-        preset.windows_version,
-        timeout,
-        verbose,
+        ctx=ctx,
+        file=source,
+        backend=BackendChoice(preset.backend),
+        proton=preset.proton,
+        tuning=ProtonTuningChoice(preset.proton_tuning),
+        prefix=Path(preset.prefix) if preset.prefix else None,
+        dependencies=dependencies,
+        winver=preset.windows_version,
+        timeout=timeout,
+        verbose=verbose,
     )
 
 
@@ -632,6 +670,7 @@ def environments(
             ("Identifier", "left"),
             ("Application", "left"),
             ("Runtime", "left"),
+            ("DXVK", "left"),
             ("Size", "right"),
             ("State", "left"),
             ("Path", "left"),
@@ -641,6 +680,11 @@ def environments(
                 item.identifier,
                 item.application,
                 item.runtime or item.backend.title(),
+                "available"
+                if item.dxvk_available
+                else "not detected"
+                if item.dxvk_available is False
+                else "unknown",
                 format_size(item.size_bytes),
                 "ready" if item.ready else "incomplete",
                 item.path,
@@ -660,6 +704,13 @@ def remove_environment(
         bool,
         typer.Option("--yes", help="Confirm permanent removal of this managed environment."),
     ] = False,
+    backup: Annotated[
+        bool,
+        typer.Option(
+            "--backup/--no-backup",
+            help="Create a restorable snapshot before permanent removal.",
+        ),
+    ] = True,
 ) -> None:
     """Permanently remove one validated RunEXE-managed environment."""
 
@@ -672,13 +723,254 @@ def remove_environment(
             f"This permanently removes {item.application}'s {format_size(item.size_bytes)} "
             f"{item.backend} environment at {item.path}."
         )
+        if backup:
+            print_hint("A restorable backup will be created first (disable with --no-backup).")
         print_hint(f"Repeat with: runexe remove-environment {identifier} --yes")
         raise typer.Exit(code=2)
     try:
+        created_backup = create_environment_backup(item) if backup else None
         remove_managed_environment(item.path)
-    except (OSError, ValueError) as error:
+    except (BackupError, OSError, ValueError) as error:
         _fail(str(error))
+    if created_backup is not None:
+        print_success(f"Backup created: {created_backup.identifier}")
     print_success(f"Removed {identifier}.")
+
+
+@app.command(name="backup-environment")
+def backup_environment(
+    identifier: Annotated[str, typer.Argument(help="Environment ID from runexe environments.")],
+) -> None:
+    """Create a compressed snapshot of one managed environment."""
+
+    item = next(
+        (
+            environment
+            for environment in discover_environments()
+            if environment.identifier == identifier
+        ),
+        None,
+    )
+    if item is None:
+        _fail(f"No managed environment matches '{identifier}'.")
+    try:
+        backup = create_environment_backup(item)
+    except BackupError as error:
+        _fail(str(error))
+    print_success(f"Created backup {backup.identifier} ({format_size(backup.size_bytes)}).")
+
+
+@app.command()
+def backups(
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit backup inventory as JSON.")
+    ] = False,
+) -> None:
+    """List restorable managed-environment backups."""
+
+    items = discover_backups()
+    if json_output:
+        typer.echo(json.dumps([item.as_dict() for item in items], indent=2))
+        return
+    print_banner("Environment backups | stored separately from live prefixes")
+    if not items:
+        print_hint("Create one with: runexe backup-environment ENVIRONMENT_ID")
+        return
+    print_table(
+        "Restorable backups",
+        (
+            ("Backup ID", "left"),
+            ("Application", "left"),
+            ("Backend", "left"),
+            ("Size", "right"),
+            ("Created", "left"),
+        ),
+        (
+            (
+                item.identifier,
+                item.application,
+                item.backend,
+                format_size(item.size_bytes),
+                item.created_at,
+            )
+            for item in items
+        ),
+    )
+
+
+@app.command(name="restore-backup")
+def restore_environment_backup(
+    identifier: Annotated[str, typer.Argument(help="Backup ID from runexe backups.")],
+    yes: Annotated[
+        bool,
+        typer.Option("--yes", help="Confirm restoration into the original managed location."),
+    ] = False,
+) -> None:
+    """Safely restore a backup when its original environment path is absent."""
+
+    backup = next((item for item in discover_backups() if item.identifier == identifier), None)
+    if backup is None:
+        _fail(f"No backup matches '{identifier}'.")
+    if not yes:
+        print_warning(f"This restores {backup.application}'s {backup.backend} environment.")
+        print_hint(f"Repeat with: runexe restore-backup {identifier} --yes")
+        raise typer.Exit(code=2)
+    try:
+        target = restore_backup(backup)
+    except BackupError as error:
+        _fail(str(error))
+    print_success(f"Restored {identifier} to {target}.")
+
+
+@app.command(name="remove-backup")
+def remove_environment_backup(
+    identifier: Annotated[str, typer.Argument(help="Backup ID from runexe backups.")],
+    yes: Annotated[bool, typer.Option("--yes", help="Confirm permanent backup removal.")] = False,
+) -> None:
+    """Permanently remove one backup without touching a live environment."""
+
+    backup = next((item for item in discover_backups() if item.identifier == identifier), None)
+    if backup is None:
+        _fail(f"No backup matches '{identifier}'.")
+    if not yes:
+        print_warning(f"This permanently removes backup {identifier}.")
+        print_hint(f"Repeat with: runexe remove-backup {identifier} --yes")
+        raise typer.Exit(code=2)
+    try:
+        remove_backup(backup)
+    except BackupError as error:
+        _fail(str(error))
+    print_success(f"Removed backup {identifier}.")
+
+
+@app.command(name="configure-environment")
+def configure_environment(
+    identifier: Annotated[str, typer.Argument(help="Environment ID from runexe environments.")],
+    tool: Annotated[
+        str,
+        typer.Option("--tool", help="winecfg, regedit, control, uninstaller, or explorer."),
+    ] = "winecfg",
+) -> None:
+    """Open a native Wine/Proton maintenance tool for a managed environment."""
+
+    if tool not in CONFIGURATION_TOOLS:
+        _fail(f"Unknown tool '{tool}'. Choose one of: {', '.join(CONFIGURATION_TOOLS)}.")
+    item = next(
+        (
+            environment
+            for environment in discover_environments()
+            if environment.identifier == identifier
+        ),
+        None,
+    )
+    if item is None:
+        _fail(f"No managed environment matches '{identifier}'.")
+    try:
+        open_environment_configuration(item, tool)
+    except ConfigurationError as error:
+        _fail(str(error))
+    print_success(f"Opened {CONFIGURATION_TOOLS[tool][0]} for {identifier}.")
+
+
+@app.command(name="graphics")
+def graphics_readiness(
+    json_output: Annotated[
+        bool, typer.Option("--json", help="Emit Vulkan/GPU and DXVK readiness as JSON.")
+    ] = False,
+) -> None:
+    """Inspect Vulkan/GPU readiness and DXVK in managed environments."""
+
+    host = detect_host()
+    environments = discover_environments()
+    payload = {
+        "vulkan_available": host.vulkan_available,
+        "vulkan_version": host.vulkan_version,
+        "vulkan_devices": host.vulkan_devices,
+        "vulkan_error": host.vulkan_error,
+        "environments": [
+            {
+                "identifier": item.identifier,
+                "dxvk_available": item.dxvk_available,
+                "dxvk_source": item.dxvk_source,
+                "dxvk_components": item.dxvk_components,
+            }
+            for item in environments
+        ],
+    }
+    if json_output:
+        typer.echo(json.dumps(payload, indent=2))
+        return
+    print_banner("Graphics readiness | read-only Vulkan and DXVK inspection")
+    print_summary(
+        "Vulkan",
+        [
+            (
+                "Status",
+                "ready"
+                if host.vulkan_available
+                else "unavailable"
+                if host.vulkan_available is False
+                else "unknown",
+            ),
+            ("Version", host.vulkan_version or "not reported"),
+            ("Devices", ", ".join(host.vulkan_devices) or "none reported"),
+            ("Detail", host.vulkan_error or "vulkaninfo completed successfully"),
+        ],
+    )
+    if host.vulkan_available is None:
+        print_hint("Install vulkaninfo with: " + install_hint("vulkan"))
+    if environments:
+        print_table(
+            "DXVK inventory",
+            (("Environment", "left"), ("DXVK", "left"), ("Source", "left"), ("DLLs", "left")),
+            (
+                (
+                    item.identifier,
+                    "available"
+                    if item.dxvk_available
+                    else "not detected"
+                    if item.dxvk_available is False
+                    else "unknown",
+                    item.dxvk_source,
+                    ", ".join(item.dxvk_components) or "-",
+                )
+                for item in environments
+            ),
+        )
+
+
+@desktop_app.command("install")
+def desktop_install(
+    executable: Annotated[
+        Path | None,
+        typer.Option(
+            "--executable",
+            help="runexe-gui executable to place in the desktop entry.",
+        ),
+    ] = None,
+) -> None:
+    """Add RunEXE to the current Linux user's desktop application menu."""
+
+    try:
+        paths = install_desktop_entry(executable)
+    except DesktopIntegrationError as error:
+        _fail(str(error))
+    print_success(f"Installed desktop entry: {paths.desktop_file}")
+    print_hint("RunEXE should now appear in the application menu and Open With list.")
+
+
+@desktop_app.command("remove")
+def desktop_remove() -> None:
+    """Remove only the desktop-menu files managed by RunEXE."""
+
+    try:
+        paths, removed = remove_desktop_entry()
+    except DesktopIntegrationError as error:
+        _fail(str(error))
+    if removed:
+        print_success(f"Removed desktop entry: {paths.desktop_file}")
+    else:
+        print_hint("No RunEXE-managed desktop entry was installed.")
 
 
 @app.command(name="backends")

@@ -1,2 +1,4 @@
 include CHANGELOG.md
+include install.sh
+include uninstall.sh
 recursive-include assets *.png

@@ -35,6 +35,7 @@ class LaunchPreset:
 
     backend: str = "auto"
     proton: str | None = None
+    proton_tuning: str = "default"
     windows_version: str | None = None
     dependencies: str = "auto"
     prefix: str | None = None
@@ -49,6 +50,12 @@ class LaunchPreset:
         return cls(
             backend=backend if backend in {"auto", "wine", "proton"} else "auto",
             proton=value.get("proton") if isinstance(value.get("proton"), str) else None,
+            proton_tuning=(
+                value.get("proton_tuning")
+                if value.get("proton_tuning")
+                in {"default", "diagnostics", "wined3d", "dxvk-hud", "no-fsync", "no-ntsync"}
+                else "default"
+            ),
             windows_version=(
                 value.get("windows_version")
                 if value.get("windows_version") in {"7", "8", "8.1", "10", "11"}

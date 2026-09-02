@@ -101,6 +101,7 @@ _PACKAGES: dict[str, dict[str, tuple[str, ...]]] = {
     "apt": {
         "wine": ("wine",),
         "winetricks": ("winetricks",),
+        "vulkan": ("vulkan-tools",),
         "gui": (
             "libegl1",
             "libgl1",
@@ -133,6 +134,7 @@ _PACKAGES: dict[str, dict[str, tuple[str, ...]]] = {
     "dnf": {
         "wine": ("wine",),
         "winetricks": ("winetricks",),
+        "vulkan": ("vulkan-tools",),
         "gui": (
             "dbus-libs",
             "fontconfig",
@@ -156,6 +158,7 @@ _PACKAGES: dict[str, dict[str, tuple[str, ...]]] = {
     "pacman": {
         "wine": ("wine",),
         "winetricks": ("winetricks",),
+        "vulkan": ("vulkan-tools",),
         "gui": (
             "dbus",
             "fontconfig",
@@ -177,6 +180,7 @@ _PACKAGES: dict[str, dict[str, tuple[str, ...]]] = {
     "zypper": {
         "wine": ("wine",),
         "winetricks": ("winetricks",),
+        "vulkan": ("vulkan-tools",),
         "gui": (
             "fontconfig",
             "libdbus-1-3",
@@ -201,6 +205,7 @@ _PACKAGES: dict[str, dict[str, tuple[str, ...]]] = {
     "apk": {
         "wine": ("wine",),
         "winetricks": ("winetricks",),
+        "vulkan": ("vulkan-tools",),
         "gui": (
             "dbus-libs",
             "fontconfig",
@@ -223,6 +228,7 @@ _PACKAGES: dict[str, dict[str, tuple[str, ...]]] = {
     "xbps-install": {
         "wine": ("wine",),
         "winetricks": ("winetricks",),
+        "vulkan": ("Vulkan-Tools",),
         "gui": (
             "dbus-libs",
             "fontconfig",
@@ -243,6 +249,7 @@ _PACKAGES: dict[str, dict[str, tuple[str, ...]]] = {
     "emerge": {
         "wine": ("app-emulation/wine-vanilla",),
         "winetricks": ("app-emulation/winetricks",),
+        "vulkan": ("dev-util/vulkan-tools",),
         "gui": (
             "x11-libs/libxcb",
             "x11-libs/libxkbcommon",
@@ -257,6 +264,7 @@ _PACKAGES: dict[str, dict[str, tuple[str, ...]]] = {
     "eopkg": {
         "wine": ("wine",),
         "winetricks": ("winetricks",),
+        "vulkan": ("vulkan-tools",),
         "gui": (
             "dbus",
             "fontconfig",
@@ -301,6 +309,7 @@ def install_hint(component: str, distribution: LinuxDistribution | None = None) 
         packages = {
             "wine": "nixpkgs#wineWowPackages.stable",
             "winetricks": "nixpkgs#winetricks",
+            "vulkan": "nixpkgs#vulkan-tools",
             "gui": (
                 "nixpkgs#dbus nixpkgs#glib nixpkgs#libxcb nixpkgs#libxkbcommon "
                 "nixpkgs#fontconfig nixpkgs#freetype nixpkgs#libglvnd nixpkgs#wayland"

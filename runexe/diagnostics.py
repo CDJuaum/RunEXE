@@ -12,6 +12,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .gpu import detect_gpu
+from .graphics import probe_vulkan
 from .platform_support import (
     LinuxDistribution,
     detect_libc,
@@ -194,9 +195,16 @@ def collect_diagnostics(include_gui: bool = True) -> DoctorReport:
     )
 
     gpu = detect_gpu()
+    vulkan = probe_vulkan()
     vendor_label = ", ".join(gpu.gpu_vendors) if gpu.gpu_vendors else "no GPU vendor identified"
     if gpu.vulkan_supported:
-        checks.append(DiagnosticCheck("Vulkan", "ok", f"hardware driver detected ({vendor_label})"))
+        detail = f"hardware driver detected ({vendor_label})"
+        if vulkan.available:
+            devices = ", ".join(vulkan.devices)
+            version = f"; Vulkan {vulkan.version}" if vulkan.version else ""
+            if devices:
+                detail += f"; {devices}{version}"
+        checks.append(DiagnosticCheck("Vulkan", "ok", detail))
     elif gpu.hardware_vulkan_icds and not gpu.vulkan_loader_installed:
         checks.append(
             DiagnosticCheck(
@@ -220,7 +228,9 @@ def collect_diagnostics(include_gui: bool = True) -> DoctorReport:
             DiagnosticCheck(
                 "Vulkan",
                 "warning",
-                "not detected; DXVK/VKD3D-Proton titles may run in software or fail to start",
+                vulkan.error
+                if vulkan.available is False
+                else "not detected; DXVK/VKD3D-Proton titles may run in software or fail to start",
                 install_hint("vulkan", distribution),
             )
         )

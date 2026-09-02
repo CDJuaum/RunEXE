@@ -73,3 +73,20 @@ def test_proton_environment_is_isolated_and_complete(tmp_path):
     assert env["STEAM_COMPAT_INSTALL_PATH"] == str(executable.parent.resolve())
     assert env["STEAM_COMPAT_APP_ID"].isdigit()
     assert "WINEPREFIX" not in env
+
+
+def test_proton_tuning_presets_are_temporary_environment_overrides(tmp_path, monkeypatch):
+    root = tmp_path / "Steam"
+    installation = make_proton(root, "Proton 11.0")
+    executable = tmp_path / "game.exe"
+    executable.touch()
+    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
+
+    diagnostics = proton_environment(installation, tmp_path / "compat", executable, "diagnostics")
+    fallback = proton_environment(installation, tmp_path / "compat", executable, "wined3d")
+
+    assert diagnostics["PROTON_LOG"] == "1"
+    assert diagnostics["DXVK_LOG_LEVEL"] == "info"
+    assert diagnostics["PROTON_LOG_DIR"] == str(tmp_path / "state" / "runexe" / "logs")
+    assert fallback["PROTON_USE_WINED3D"] == "1"
+    assert "PROTON_USE_WINED3D" not in diagnostics

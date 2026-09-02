@@ -78,6 +78,16 @@ class Dependency:
 
 
 @dataclass(frozen=True)
+class GraphicsRequirements:
+    """Graphics APIs inferred from PE imports and their likely translators."""
+
+    apis: tuple[str, ...] = ()
+    translators: tuple[str, ...] = ()
+    vulkan_recommended: bool = False
+    vulkan_required: bool = False
+
+
+@dataclass(frozen=True)
 class ApplicationClassification:
     """Result of classify_application(): the game/application verdict
     plus enough detail to see why it was reached.
@@ -134,6 +144,7 @@ class CompatibilityReport:
     required_verbs: list[str] = field(default_factory=list)
     dependencies: list[Dependency] = field(default_factory=list)
     profile: ApplicationProfile | None = None
+    graphics: GraphicsRequirements | None = None
     # "high" or "medium" -- see ApplicationClassification. Defaults to
     # "medium" for reports built without going through
     # classify_application (e.g. hand-built test fixtures).
@@ -155,6 +166,11 @@ class HostInfo:
     winetricks_installed: bool
     proton_installed: bool = False
     proton_versions: list[str] = field(default_factory=list)
+    # None means vulkaninfo is unavailable and readiness is unknown.
+    vulkan_available: bool | None = None
+    vulkan_version: str | None = None
+    vulkan_devices: list[str] = field(default_factory=list)
+    vulkan_error: str | None = None
     # True when a hardware-backed Vulkan driver is loadable, which DXVK
     # and VKD3D-Proton require to translate Direct3D. See gpu.py.
     vulkan_supported: bool = False

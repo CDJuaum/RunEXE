@@ -98,6 +98,30 @@ def test_launches_with_selected_proton(select, ensure, run, tmp_path):
     )
 
 
+@patch("runexe.runner.subprocess.run")
+@patch("runexe.runner.ensure_proton_prefix")
+@patch("runexe.runner.select_proton")
+def test_launch_applies_selected_proton_tuning(select, ensure, run, tmp_path):
+    proton_dir = tmp_path / "Proton"
+    proton_dir.mkdir()
+    script = proton_dir / "proton"
+    script.touch()
+    select.return_value = ProtonInstallation("Proton", script, "11", tmp_path / "Steam")
+    run.return_value = subprocess.CompletedProcess([], 0, "", "")
+    executable = tmp_path / "game.exe"
+    executable.touch()
+
+    launch(
+        ExecutableInfo(executable, True),
+        report(backend="proton", recommended_runtime="Proton"),
+        prefix=tmp_path / "compat",
+        install_dependencies=False,
+        proton_tuning="no-fsync",
+    )
+
+    assert run.call_args.kwargs["env"]["PROTON_NO_FSYNC"] == "1"
+
+
 @patch("runexe.runner.ensure_prefix")
 @patch("runexe.runner._require_binary", return_value="/usr/bin/wine")
 def test_prepares_wine_without_launching(require, ensure, tmp_path):

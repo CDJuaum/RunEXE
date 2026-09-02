@@ -15,6 +15,8 @@ The Winetricks mapping is therefore optional and only used for
 dependencies where installing a known runtime is appropriate.
 """
 
+import re
+
 from .models import Dependency, PEImport
 
 # DLL -> dependency information.
@@ -69,6 +71,12 @@ DLL_DEPENDENCIES: dict[str, Dependency] = {
         winetricks_verb="vcrun2022",
     ),
     "vcruntime140_2.dll": Dependency(
+        name="Microsoft Visual C++ 2015-2022 Runtime",
+        category="runtime",
+        confidence="high",
+        winetricks_verb="vcrun2022",
+    ),
+    "vcruntime140_threads.dll": Dependency(
         name="Microsoft Visual C++ 2015-2022 Runtime",
         category="runtime",
         confidence="high",
@@ -239,6 +247,11 @@ DLL_DEPENDENCIES: dict[str, Dependency] = {
         confidence="high",
         winetricks_verb="ucrtbase2019",
     ),
+    "webview2loader.dll": Dependency(
+        name="Microsoft Edge WebView2 Runtime",
+        category="runtime",
+        confidence="high",
+    ),
     # ---------------------------------------------------------
     # Direct3D
     # ---------------------------------------------------------
@@ -352,6 +365,11 @@ DLL_DEPENDENCIES: dict[str, Dependency] = {
         category="graphics",
         confidence="high",
     ),
+    "d3d8.dll": Dependency(
+        name="Direct3D 8",
+        category="graphics",
+        confidence="high",
+    ),
     "d3d10.dll": Dependency(
         name="Direct3D 10",
         category="graphics",
@@ -359,6 +377,11 @@ DLL_DEPENDENCIES: dict[str, Dependency] = {
     ),
     "d3d10_1.dll": Dependency(
         name="Direct3D 10.1",
+        category="graphics",
+        confidence="high",
+    ),
+    "d3d10core.dll": Dependency(
+        name="Direct3D 10",
         category="graphics",
         confidence="high",
     ),
@@ -382,6 +405,31 @@ DLL_DEPENDENCIES: dict[str, Dependency] = {
         category="graphics",
         confidence="high",
     ),
+    "ddraw.dll": Dependency(
+        name="DirectDraw",
+        category="graphics",
+        confidence="high",
+    ),
+    "d2d1.dll": Dependency(
+        name="Direct2D",
+        category="graphics",
+        confidence="high",
+    ),
+    "dwrite.dll": Dependency(
+        name="DirectWrite",
+        category="graphics",
+        confidence="high",
+    ),
+    "vulkan-1.dll": Dependency(
+        name="Vulkan",
+        category="graphics",
+        confidence="high",
+    ),
+    "opengl32.dll": Dependency(
+        name="OpenGL",
+        category="graphics",
+        confidence="high",
+    ),
     # ---------------------------------------------------------
     # Input
     # ---------------------------------------------------------
@@ -398,6 +446,11 @@ DLL_DEPENDENCIES: dict[str, Dependency] = {
     ),
     "xinput9_1_0.dll": Dependency(
         name="XInput",
+        category="input",
+        confidence="high",
+    ),
+    "dinput8.dll": Dependency(
+        name="DirectInput 8",
         category="input",
         confidence="high",
     ),
@@ -490,6 +543,11 @@ DLL_DEPENDENCIES: dict[str, Dependency] = {
         category="multimedia",
         confidence="high",
     ),
+    "quartz.dll": Dependency(
+        name="DirectShow",
+        category="multimedia",
+        confidence="high",
+    ),
     "windowscodecs.dll": Dependency(
         name="Windows Imaging Component",
         category="multimedia",
@@ -552,6 +610,30 @@ DLL_DEPENDENCIES: dict[str, Dependency] = {
 DOTNET_VERB = "dotnet48"
 
 
+def _pattern_dependency(name: str) -> Dependency | None:
+    """Recognize versioned runtime DLL families without a brittle exhaustive table."""
+
+    if re.fullmatch(r"api-ms-win-crt-[a-z0-9_-]+\.dll", name):
+        return Dependency("Universal C Runtime", "runtime", "high", "ucrtbase2019")
+    if re.fullmatch(r"d3dx9_(?:2[4-9]|3[0-9]|4[0-3])\.dll", name):
+        return Dependency("Direct3D 9 Extensions", "graphics", "high", "d3dx9")
+    if re.fullmatch(r"d3dx10_(?:3[3-9]|4[0-3])\.dll", name):
+        return Dependency("Direct3D 10 Extensions", "graphics", "high", "d3dx10")
+    d3dx11 = re.fullmatch(r"d3dx11_(4[23])\.dll", name)
+    if d3dx11:
+        return Dependency(
+            "Direct3D 11 Extensions",
+            "graphics",
+            "high",
+            f"d3dx11_{d3dx11.group(1)}",
+        )
+    if re.fullmatch(r"xactengine[23]_[0-7]\.dll", name):
+        return Dependency("Microsoft XACT", "audio", "high", "xact")
+    if re.fullmatch(r"xaudio2_[0-7]\.dll", name):
+        return Dependency("XAudio 2.x", "audio", "high", "xact")
+    return None
+
+
 def detect_dependencies(
     imports: list[PEImport],
 ) -> list[Dependency]:
@@ -561,7 +643,8 @@ def detect_dependencies(
     seen: set[tuple[str, str]] = set()
 
     for imported in imports or []:
-        dependency = DLL_DEPENDENCIES.get(imported.name.lower())
+        normalized_name = imported.name.lower()
+        dependency = DLL_DEPENDENCIES.get(normalized_name) or _pattern_dependency(normalized_name)
 
         if dependency is None:
             continue

@@ -39,6 +39,71 @@ class ProtonInstallation:
         return None
 
 
+@dataclass(frozen=True)
+class ProtonTuningPreset:
+    key: str
+    label: str
+    description: str
+    environment: tuple[tuple[str, str], ...] = ()
+
+
+PROTON_TUNING_PRESETS: tuple[ProtonTuningPreset, ...] = (
+    ProtonTuningPreset("default", "Runtime defaults", "Do not override Proton behavior."),
+    ProtonTuningPreset(
+        "diagnostics",
+        "Diagnostic logging",
+        "Enable Proton, DXVK, and VKD3D logs for one application.",
+        (("PROTON_LOG", "1"), ("DXVK_LOG_LEVEL", "info"), ("VKD3D_DEBUG", "warn")),
+    ),
+    ProtonTuningPreset(
+        "wined3d",
+        "WineD3D fallback",
+        "Use OpenGL WineD3D instead of Vulkan DXVK for Direct3D 9-11.",
+        (("PROTON_USE_WINED3D", "1"),),
+    ),
+    ProtonTuningPreset(
+        "dxvk-hud",
+        "DXVK device/FPS HUD",
+        "Show the selected GPU, driver, and frame rate while troubleshooting.",
+        (("DXVK_HUD", "devinfo,fps"),),
+    ),
+    ProtonTuningPreset(
+        "no-fsync",
+        "Disable fsync",
+        "Disable futex-based synchronization for compatibility testing.",
+        (("PROTON_NO_FSYNC", "1"),),
+    ),
+    ProtonTuningPreset(
+        "no-ntsync",
+        "Disable ntsync",
+        "Disable the ntsync path for compatibility testing.",
+        (("PROTON_NO_NTSYNC", "1"),),
+    ),
+)
+
+
+def proton_tuning_preset(key: str) -> ProtonTuningPreset:
+    preset = next((item for item in PROTON_TUNING_PRESETS if item.key == key), None)
+    if preset is None:
+        choices = ", ".join(item.key for item in PROTON_TUNING_PRESETS)
+        raise ProtonError(f"Unknown Proton tuning preset '{key}'. Choose one of: {choices}.")
+    return preset
+
+
+def _apply_proton_tuning(env: dict[str, str], key: str) -> None:
+    preset = proton_tuning_preset(key)
+    env.update(preset.environment)
+    if key == "diagnostics":
+        state_home = Path(os.environ.get("XDG_STATE_HOME", Path.home() / ".local" / "state"))
+        log_dir = state_home / "runexe" / "logs"
+        try:
+            log_dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
+        else:
+            env["PROTON_LOG_DIR"] = str(log_dir)
+
+
 def _common_steam_roots() -> list[Path]:
     roots = [
         Path.home() / ".steam" / "root",
@@ -205,6 +270,7 @@ def proton_environment(
     installation: ProtonInstallation,
     compat_data: Path,
     executable: Path,
+    tuning: str = "default",
 ) -> dict[str, str]:
     """Build the environment expected by Proton's launcher script."""
 
@@ -223,6 +289,7 @@ def proton_environment(
     )
     env.pop("WINEARCH", None)
     env.pop("WINEPREFIX", None)
+    _apply_proton_tuning(env, tuning)
     return env
 
 

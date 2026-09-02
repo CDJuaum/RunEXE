@@ -7,7 +7,7 @@ import os
 import shlex
 import sys
 import uuid
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -49,6 +49,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPlainTextEdit,
     QProgressBar,
@@ -60,7 +61,19 @@ from PySide6.QtWidgets import (
 
 from runexe import __version__
 from runexe.analyzer import analyze_executable
+from runexe.backups import (
+    BackupInfo,
+    create_environment_backup,
+    discover_backups,
+    remove_backup,
+    restore_backup,
+)
 from runexe.compatibility import analyze_compatibility
+from runexe.configuration import (
+    CONFIGURATION_TOOLS,
+    ConfigurationError,
+    open_environment_configuration,
+)
 from runexe.environments import (
     EnvironmentInfo,
     discover_environments,
@@ -71,7 +84,11 @@ from runexe.host import detect_host
 from runexe.library import ApplicationLibrary, ApplicationRecord, LaunchPreset
 from runexe.models import CompatibilityReport, ExecutableInfo, HostInfo
 from runexe.profiles import detect_runtime_issue
-from runexe.proton import ProtonInstallation, discover_proton_installations
+from runexe.proton import (
+    PROTON_TUNING_PRESETS,
+    ProtonInstallation,
+    discover_proton_installations,
+)
 from runexe.runner import (
     PreparedEnvironment,
     build_launch_spec,
@@ -97,6 +114,7 @@ class AnalysisBundle:
 class LibraryBundle:
     applications: list[ApplicationRecord]
     environments: list[EnvironmentInfo]
+    backups: list[BackupInfo] = field(default_factory=list)
 
 
 def _asset_path() -> Path:
@@ -159,6 +177,7 @@ class RunEXEWindow(QMainWindow):
         self.compatibility: CompatibilityReport | None = None
         self.proton_installations: list[ProtonInstallation] = []
         self._managed_environments: list[EnvironmentInfo] = []
+        self._managed_backups: list[BackupInfo] = []
         self.application_process: QProcess | None = None
         self._active_launch_path: Path | None = None
         self._active_launch_preset: LaunchPreset | None = None
@@ -449,10 +468,12 @@ class RunEXEWindow(QMainWindow):
         self.wine_metric = MetricCard("Wine")
         self.proton_metric = MetricCard("Proton")
         self.winetricks_metric = MetricCard("Winetricks")
+        self.vulkan_metric = MetricCard("Vulkan / GPU")
         runtime_grid.addWidget(self.wine_metric, 0, 0)
         runtime_grid.addWidget(self.proton_metric, 0, 1)
-        runtime_grid.addWidget(self.winetricks_metric, 0, 2)
-        for column in range(3):
+        runtime_grid.addWidget(self.winetricks_metric, 1, 0)
+        runtime_grid.addWidget(self.vulkan_metric, 1, 1)
+        for column in range(2):
             runtime_grid.setColumnStretch(column, 1)
         layout.addLayout(runtime_grid)
 
@@ -477,6 +498,15 @@ class RunEXEWindow(QMainWindow):
         self.proton_combo = QComboBox()
         self.proton_combo.addItem("Best available build", None)
         self.proton_combo.currentIndexChanged.connect(self.runtime_options_changed)
+        self.proton_tuning_combo = QComboBox()
+        for preset in PROTON_TUNING_PRESETS:
+            self.proton_tuning_combo.addItem(preset.label, preset.key)
+            self.proton_tuning_combo.setItemData(
+                self.proton_tuning_combo.count() - 1,
+                preset.description,
+                Qt.ItemDataRole.ToolTipRole,
+            )
+        self.proton_tuning_combo.currentIndexChanged.connect(self._runtime_setting_changed)
         self.winver_combo = QComboBox()
         self.winver_combo.addItem("Runtime default", None)
         for version in ("11", "10", "8.1", "8", "7"):
@@ -493,6 +523,7 @@ class RunEXEWindow(QMainWindow):
         for combo in (
             self.backend_combo,
             self.proton_combo,
+            self.proton_tuning_combo,
             self.winver_combo,
             self.dependencies_combo,
         ):
@@ -501,6 +532,7 @@ class RunEXEWindow(QMainWindow):
             combo.view().viewport().setAutoFillBackground(True)
         form.addRow("Backend", self.backend_combo)
         form.addRow("Proton build", self.proton_combo)
+        form.addRow("Proton tuning", self.proton_tuning_combo)
         form.addRow("Windows version", self.winver_combo)
         form.addRow("Dependencies", self.dependencies_combo)
         strategy_layout.addLayout(form)
@@ -573,10 +605,13 @@ class RunEXEWindow(QMainWindow):
         summary_grid.setHorizontalSpacing(12)
         self.library_apps_metric = MetricCard("Recent applications")
         self.library_storage_metric = MetricCard("Managed storage")
+        self.library_backup_metric = MetricCard("Backups")
         summary_grid.addWidget(self.library_apps_metric, 0, 0)
         summary_grid.addWidget(self.library_storage_metric, 0, 1)
+        summary_grid.addWidget(self.library_backup_metric, 0, 2)
         summary_grid.setColumnStretch(0, 1)
         summary_grid.setColumnStretch(1, 1)
+        summary_grid.setColumnStretch(2, 1)
         layout.addLayout(summary_grid)
 
         recent_card = Card()
@@ -632,13 +667,53 @@ class RunEXEWindow(QMainWindow):
         environment_actions = QHBoxLayout()
         self.environment_open_button = _button("Open folder")
         self.environment_open_button.clicked.connect(self.open_environment_folder)
+        self.environment_configure_button = _button("Configure…")
+        self.environment_configure_button.setToolTip(
+            "Open a native maintenance tool inside this exact environment."
+        )
+        self.environment_configure_menu = QMenu(self.environment_configure_button)
+        for tool, (label, _program) in CONFIGURATION_TOOLS.items():
+            action = self.environment_configure_menu.addAction(label)
+            action.setData(tool)
+            action.triggered.connect(
+                lambda _checked=False, selected=tool: self.configure_selected_environment(selected)
+            )
+        self.environment_configure_button.setMenu(self.environment_configure_menu)
+        self.environment_backup_button = _button("Back up")
+        self.environment_backup_button.clicked.connect(self.backup_selected_environment)
         self.environment_remove_button = _button("Remove environment")
         self.environment_remove_button.clicked.connect(self.remove_selected_environment)
         environment_actions.addWidget(self.environment_open_button)
+        environment_actions.addWidget(self.environment_configure_button)
+        environment_actions.addWidget(self.environment_backup_button)
         environment_actions.addWidget(self.environment_remove_button)
         environment_actions.addStretch(1)
         environments_layout.addLayout(environment_actions)
         layout.addWidget(environments_card)
+
+        backups_card = Card()
+        backups_layout = QVBoxLayout(backups_card)
+        backups_layout.setContentsMargins(20, 18, 20, 20)
+        backups_layout.addLayout(
+            _section_header(
+                "Environment backups",
+                "Restore a removed prefix without overwriting an existing environment.",
+            )
+        )
+        self.backup_list = QListWidget()
+        self.backup_list.setMinimumHeight(150)
+        self.backup_list.itemSelectionChanged.connect(self._update_library_actions)
+        backups_layout.addWidget(self.backup_list)
+        backup_actions = QHBoxLayout()
+        self.backup_restore_button = _button("Restore backup", primary=True)
+        self.backup_restore_button.clicked.connect(self.restore_selected_backup)
+        self.backup_remove_button = _button("Delete backup")
+        self.backup_remove_button.clicked.connect(self.remove_selected_backup)
+        backup_actions.addWidget(self.backup_restore_button)
+        backup_actions.addWidget(self.backup_remove_button)
+        backup_actions.addStretch(1)
+        backups_layout.addLayout(backup_actions)
+        layout.addWidget(backups_card)
         layout.addStretch(1)
         return scroll
 
@@ -790,6 +865,8 @@ class RunEXEWindow(QMainWindow):
             and not running
         )
         self.proton_combo.setEnabled(bool(self.proton_installations) and not blocking_busy)
+        proton_backend = bool(self.compatibility and self.compatibility.backend == "proton")
+        self.proton_tuning_combo.setEnabled(proton_backend and not blocking_busy)
         self.library_refresh_button.setEnabled(not library_busy and not running)
         self._update_library_actions()
         if running:
@@ -832,6 +909,26 @@ class RunEXEWindow(QMainWindow):
             else "Required only for detected extra components",
             "success" if self.host.winetricks_installed else "warning",
         )
+        if self.host.vulkan_available:
+            devices = ", ".join(self.host.vulkan_devices) or "Vulkan-capable device detected"
+            detail = (
+                f"{devices} • Vulkan {self.host.vulkan_version}"
+                if self.host.vulkan_version
+                else devices
+            )
+            self.vulkan_metric.set_data("Ready", detail, "success")
+        elif self.host.vulkan_available is False:
+            self.vulkan_metric.set_data(
+                "Unavailable",
+                self.host.vulkan_error or "Check the GPU driver and Vulkan ICD",
+                "error",
+            )
+        else:
+            self.vulkan_metric.set_data(
+                "Unknown",
+                "Install vulkan-tools to verify DXVK/VKD3D readiness",
+                "warning",
+            )
 
     def _set_proton_installations(self, installations: list[ProtonInstallation]) -> None:
         selected = self.proton_combo.currentData()
@@ -853,6 +950,7 @@ class RunEXEWindow(QMainWindow):
             proton=str(self.proton_combo.currentData())
             if self.proton_combo.currentData()
             else None,
+            proton_tuning=str(self.proton_tuning_combo.currentData() or "default"),
             windows_version=str(self.winver_combo.currentData())
             if self.winver_combo.currentData()
             else None,
@@ -866,11 +964,13 @@ class RunEXEWindow(QMainWindow):
         blockers = [
             QSignalBlocker(self.backend_combo),
             QSignalBlocker(self.proton_combo),
+            QSignalBlocker(self.proton_tuning_combo),
             QSignalBlocker(self.winver_combo),
             QSignalBlocker(self.dependencies_combo),
         ]
         self._select_combo_data(self.backend_combo, preset.backend)
         self._select_combo_data(self.proton_combo, preset.proton)
+        self._select_combo_data(self.proton_tuning_combo, preset.proton_tuning)
         self._select_combo_data(self.winver_combo, preset.windows_version)
         self._select_combo_data(self.dependencies_combo, preset.dependencies)
         self.prefix_input.setText(preset.prefix or "")
@@ -908,12 +1008,14 @@ class RunEXEWindow(QMainWindow):
             return LibraryBundle(
                 self.application_library.records(),
                 discover_environments(),
+                discover_backups(),
             )
 
         self._start_task("library", "Refreshing application library", load, self._library_ready)
 
     def _library_ready(self, bundle: LibraryBundle) -> None:
         self._managed_environments = bundle.environments
+        self._managed_backups = bundle.backups
         self.recent_list.clear()
         for record in bundle.applications:
             existence = "" if record.exists else "MISSING  •  "
@@ -946,9 +1048,31 @@ class RunEXEWindow(QMainWindow):
             item.setToolTip(
                 f"Runtime: {environment.runtime or environment.backend.title()}\n"
                 f"Architecture: {environment.architecture or 'unknown'}\n"
+                f"DXVK: "
+                + (
+                    f"available via {environment.dxvk_source}"
+                    if environment.dxvk_available
+                    else "not detected"
+                    if environment.dxvk_available is False
+                    else "unknown"
+                )
+                + "\n"
                 f"Last used: {environment.modified_at}"
             )
             self.environment_list.addItem(item)
+
+        self.backup_list.clear()
+        for backup in bundle.backups:
+            item = QListWidgetItem(
+                f"{backup.application}  •  {backup.backend.upper()}  •  "
+                f"{format_size(backup.size_bytes)}\n{backup.identifier}"
+            )
+            item.setData(Qt.ItemDataRole.UserRole, backup.identifier)
+            item.setToolTip(
+                f"Original environment: {backup.environment_identifier}\n"
+                f"Created: {backup.created_at}\nArchive: {backup.archive}"
+            )
+            self.backup_list.addItem(item)
 
         total_size = sum(item.size_bytes for item in bundle.environments)
         existing_apps = sum(record.exists for record in bundle.applications)
@@ -961,6 +1085,12 @@ class RunEXEWindow(QMainWindow):
             format_size(total_size),
             f"{len(bundle.environments)} isolated environment(s)",
             "warning" if total_size >= 10 * 1024**3 else "neutral",
+        )
+        backup_size = sum(item.size_bytes for item in bundle.backups)
+        self.library_backup_metric.set_data(
+            format_size(backup_size),
+            f"{len(bundle.backups)} restorable snapshot(s)",
+            "success" if bundle.backups else "neutral",
         )
         self._update_library_actions()
 
@@ -978,16 +1108,42 @@ class RunEXEWindow(QMainWindow):
             None,
         )
 
+    def _selected_backup(self) -> BackupInfo | None:
+        item = self.backup_list.currentItem()
+        if item is None:
+            return None
+        identifier = item.data(Qt.ItemDataRole.UserRole)
+        return next(
+            (backup for backup in self._managed_backups if backup.identifier == identifier),
+            None,
+        )
+
     def _update_library_actions(self) -> None:
-        busy = "library" in self._workers or "remove-environment" in self._workers
+        busy = bool(
+            {
+                "library",
+                "remove-environment",
+                "backup-environment",
+                "restore-backup",
+                "remove-backup",
+            }
+            & self._workers.keys()
+        )
         running = self._application_running()
         recent_selected = self.recent_list.currentItem() is not None
         environment_selected = self._selected_environment() is not None
+        backup_selected = self._selected_backup() is not None
         self.recent_open_button.setEnabled(recent_selected and not busy and not running)
         self.recent_forget_button.setEnabled(recent_selected and not busy)
         self.recent_prune_button.setEnabled(not busy)
         self.environment_open_button.setEnabled(environment_selected and not busy)
+        self.environment_configure_button.setEnabled(
+            environment_selected and not busy and not running
+        )
+        self.environment_backup_button.setEnabled(environment_selected and not busy)
         self.environment_remove_button.setEnabled(environment_selected and not busy and not running)
+        self.backup_restore_button.setEnabled(backup_selected and not busy and not running)
+        self.backup_remove_button.setEnabled(backup_selected and not busy)
 
     def open_recent_application(self) -> None:
         item = self.recent_list.currentItem()
@@ -1041,23 +1197,34 @@ class RunEXEWindow(QMainWindow):
         environment = self._selected_environment()
         if environment is None:
             return
-        answer = QMessageBox.warning(
-            self,
-            "Remove isolated environment?",
+        dialog = QMessageBox(self)
+        dialog.setIcon(QMessageBox.Icon.Warning)
+        dialog.setWindowTitle("Remove isolated environment?")
+        dialog.setText(
             f"This permanently removes {environment.application}'s "
             f"{format_size(environment.size_bytes)} {environment.backend} environment.\n\n"
             "Windows-side settings, saves, and installed components inside the prefix may be "
             "lost. The original application file is not removed.\n\n"
-            f"{environment.path}",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
-            QMessageBox.StandardButton.Cancel,
+            f"{environment.path}"
         )
-        if answer != QMessageBox.StandardButton.Yes:
+        backup_button = dialog.addButton("Back up and remove", QMessageBox.ButtonRole.AcceptRole)
+        remove_button = dialog.addButton(
+            "Remove without backup", QMessageBox.ButtonRole.DestructiveRole
+        )
+        cancel_button = dialog.addButton(QMessageBox.StandardButton.Cancel)
+        dialog.setDefaultButton(backup_button)
+        dialog.exec()
+        selected = dialog.clickedButton()
+        if selected is cancel_button or (
+            selected is not backup_button and selected is not remove_button
+        ):
             return
+        with_backup = selected is backup_button
 
-        def remove() -> str:
+        def remove() -> tuple[str, str | None]:
+            backup = create_environment_backup(environment) if with_backup else None
             remove_managed_environment(environment.path)
-            return environment.identifier
+            return environment.identifier, backup.identifier if backup else None
 
         self._start_task(
             "remove-environment",
@@ -1066,10 +1233,96 @@ class RunEXEWindow(QMainWindow):
             self._environment_removed,
         )
 
-    def _environment_removed(self, identifier: str) -> None:
+    def _environment_removed(self, result: tuple[str, str | None]) -> None:
+        identifier, backup_identifier = result
+        if backup_identifier:
+            self._log(f"Created environment backup: {backup_identifier}")
         self._log(f"Removed managed environment: {identifier}")
         self.task_status.setText(f"Removed {identifier}")
         self.refresh_library()
+
+    def backup_selected_environment(self) -> None:
+        environment = self._selected_environment()
+        if environment is None:
+            return
+
+        self._start_task(
+            "backup-environment",
+            f"Backing up {environment.application}",
+            lambda: create_environment_backup(environment),
+            self._environment_backed_up,
+        )
+
+    def _environment_backed_up(self, backup: BackupInfo) -> None:
+        self._log(f"Created environment backup: {backup.identifier}")
+        self.task_status.setText(f"Backup ready: {backup.identifier}")
+        self.refresh_library()
+
+    def restore_selected_backup(self) -> None:
+        backup = self._selected_backup()
+        if backup is None:
+            return
+        answer = QMessageBox.question(
+            self,
+            "Restore environment backup?",
+            f"Restore {backup.application}'s {backup.backend} environment?\n\n"
+            "Restore is allowed only when the original managed path is absent, so no live "
+            "environment will be overwritten.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        self._start_task(
+            "restore-backup",
+            f"Restoring {backup.application}",
+            lambda: restore_backup(backup),
+            lambda target: self._backup_restored(backup.identifier, target),
+        )
+
+    def _backup_restored(self, identifier: str, target: Path) -> None:
+        self._log(f"Restored backup {identifier}: {target}")
+        self.task_status.setText(f"Restored {identifier}")
+        self.refresh_library()
+
+    def remove_selected_backup(self) -> None:
+        backup = self._selected_backup()
+        if backup is None:
+            return
+        answer = QMessageBox.warning(
+            self,
+            "Delete environment backup?",
+            f"Permanently delete backup {backup.identifier}?\n\n"
+            "This does not remove a live environment.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Cancel,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        self._start_task(
+            "remove-backup",
+            f"Deleting backup {backup.identifier}",
+            lambda: (remove_backup(backup), backup.identifier)[1],
+            self._backup_removed,
+        )
+
+    def _backup_removed(self, identifier: str) -> None:
+        self._log(f"Removed environment backup: {identifier}")
+        self.task_status.setText(f"Removed backup {identifier}")
+        self.refresh_library()
+
+    def configure_selected_environment(self, tool: str = "winecfg") -> None:
+        environment = self._selected_environment()
+        if environment is None:
+            return
+        try:
+            open_environment_configuration(environment, tool)
+        except ConfigurationError as error:
+            QMessageBox.critical(self, "Could not open environment settings", str(error))
+            return
+        label = CONFIGURATION_TOOLS[tool][0]
+        self._log(f"Opened {label} for {environment.identifier}.")
+        self.task_status.setText(f"Opened {label} for {environment.application}")
 
     def _update_analysis_view(self) -> None:
         executable = self.executable
@@ -1279,6 +1532,7 @@ class RunEXEWindow(QMainWindow):
                 QSignalBlocker(self.backend_combo),
                 QSignalBlocker(self.winver_combo),
                 QSignalBlocker(self.dependencies_combo),
+                QSignalBlocker(self.proton_tuning_combo),
             ]
             self._select_combo_data(
                 self.backend_combo, str(self.settings.value("runtime/backend", "auto"))
@@ -1291,6 +1545,7 @@ class RunEXEWindow(QMainWindow):
             self._select_combo_data(self.winver_combo, str(saved_winver) if saved_winver else None)
             self.prefix_input.clear()
             self.arguments_input.clear()
+            self._select_combo_data(self.proton_tuning_combo, "default")
             preference = str(self.backend_combo.currentData())
             del blockers
 
@@ -1362,6 +1617,11 @@ class RunEXEWindow(QMainWindow):
         value = self.proton_combo.currentData()
         return str(value) if value else None
 
+    def _selected_proton_tuning(self, report: CompatibilityReport) -> str:
+        if report.backend != "proton":
+            return "default"
+        return str(self.proton_tuning_combo.currentData() or "default")
+
     def _install_dependencies(self, report: CompatibilityReport) -> bool:
         selection = self.dependencies_combo.currentData()
         if selection == "install":
@@ -1390,6 +1650,7 @@ class RunEXEWindow(QMainWindow):
                 prefix=self._selected_prefix(),
                 install_dependencies=self._install_dependencies(report),
                 proton=self._selected_proton(),
+                proton_tuning=self._selected_proton_tuning(report),
                 winver=self.winver_combo.currentData(),
             )
 
@@ -1452,6 +1713,7 @@ class RunEXEWindow(QMainWindow):
                 prefix=self._selected_prefix(),
                 install_dependencies=self._install_dependencies(report),
                 proton=self._selected_proton(),
+                proton_tuning=self._selected_proton_tuning(report),
             )
 
         self._start_task(
@@ -1601,6 +1863,7 @@ class RunEXEWindow(QMainWindow):
             "host": asdict(self.host) if self.host is not None else None,
             "launch_preset": asdict(self._current_preset()),
             "managed_environments": [item.as_dict() for item in self._managed_environments],
+            "environment_backups": [item.as_dict() for item in self._managed_backups],
             "activity": self.activity_log.toPlainText().splitlines(),
         }
         target = Path(selected).expanduser()

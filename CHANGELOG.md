@@ -2,6 +2,51 @@
 
 All notable RunEXE changes are documented here.
 
+## [0.6.0] - 2026-08-31
+
+### Added
+
+- Read-only Vulkan/GPU probing through `vulkaninfo`, DirectX API/translator
+  classification, per-environment DXVK detection, and `runexe graphics` reports.
+- Broader Windows runtime and component detection for versioned DirectX,
+  Universal CRT, WebView2, DirectShow, DirectInput, Vulkan, and OpenGL imports.
+- Validated temporary Proton tuning presets for diagnostics, WineD3D fallback,
+  the DXVK HUD, fsync, and ntsync, persisted independently for each app.
+- Compressed managed-environment backups, inventory, safe non-overwriting
+  restore, backup deletion, and default backup-before-removal in GUI and CLI.
+- Native environment maintenance tools through `runexe configure-environment`
+  and a GUI Configure action for Wine settings, Regedit, Control Panel,
+  uninstaller, and Explorer workflows.
+- A one-command, pipx-free `install.sh` that creates an isolated user-level
+  environment without invoking `sudo`, plus a marker-guarded `uninstall.sh`.
+- `runexe desktop install` and `runexe desktop remove` commands for a
+  freedesktop application-menu entry, themed logo, and Open With registration.
+
+### Changed
+
+- The Library page now reports backup storage and DXVK state, exposes backup,
+  restore, configuration, and guarded removal actions, and keeps all inventory
+  work off the UI thread.
+- Compatibility reports explain likely DXVK/VKD3D translation and warn when
+  Vulkan is unavailable without blocking a possible WineD3D fallback.
+- Desktop integration refreshes available menu/icon caches when their standard
+  tools are present and remains usable when they are absent.
+
+### Safety
+
+- Backup restore validates every archive path and link, rejects special files,
+  extracts without `tarfile.extractall`, and never overwrites a live prefix.
+- The uninstaller removes only a marker-verified `runexe/app` installation and
+  matching command links. It preserves prefixes, Proton data, and app history.
+
+### Verification
+
+- The expanded automated suite covers installer ownership, desktop integration,
+  DirectX/Vulkan/DXVK detection, Proton tuning isolation, native configuration,
+  and traversal-safe backup/restore in addition to the existing GUI/CLI suite.
+- All 91 tests pass in the Debian Qt environment; the 85-test headless suite
+  passes independently on both Debian/glibc and Alpine/musl.
+
 ## [0.5.1] - 2026-08-30
 
 ### Added
@@ -29,7 +74,7 @@ All notable RunEXE changes are documented here.
   driver, since DXVK and VKD3D-Proton require one.
 - `vulkan` package hints for every supported package-manager family
   (apt, dnf, pacman, zypper, apk, xbps-install, emerge, eopkg) and NixOS.
-  
+
 ### Changed
 
 - `classify_application()` returns an `ApplicationClassification`
@@ -79,7 +124,7 @@ All notable RunEXE changes are documented here.
 
 - 71 automated tests cover library persistence and recovery, per-app preset
   restoration, environment discovery and size reporting, direct-child deletion
-  guards, CLI launch integration, and the four-page GUI shell.
+  guards, desktop integration ownership, CLI behavior, and the four-page GUI shell.
 
 ## [0.4.3] - 2026-08-29
 

@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from runexe.gpu import (
     GpuInfo,
     VulkanIcd,
@@ -16,7 +18,12 @@ def make_render_node(drm_root: Path, name: str, vendor: str, driver: str = "amdg
     (device / "vendor").write_text(f"{vendor}\n", encoding="utf-8")
     driver_target = drm_root / "drivers" / driver
     driver_target.mkdir(parents=True, exist_ok=True)
-    (device / "driver").symlink_to(driver_target)
+    try:
+        (device / "driver").symlink_to(driver_target)
+    except OSError as error:
+        if getattr(error, "winerror", None) == 1314 or isinstance(error, PermissionError):
+            pytest.skip("symlink creation is not permitted")
+        raise
 
 
 def test_discovers_adapter_vendor_and_bound_driver(tmp_path):

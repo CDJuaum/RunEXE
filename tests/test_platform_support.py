@@ -47,6 +47,15 @@ def test_install_hints_follow_distribution_family(distribution, manager, expecte
     assert install_hint("wine", distribution) == expected
 
 
+def test_vulkan_hint_is_distribution_specific(monkeypatch):
+    monkeypatch.setattr(
+        "runexe.platform_support.shutil.which",
+        lambda name: "/usr/bin/apt" if name == "apt" else None,
+    )
+
+    assert install_hint("vulkan", LinuxDistribution("kali")) == "sudo apt install vulkan-tools"
+
+
 def test_wine64_is_a_valid_loader_fallback(monkeypatch):
     monkeypatch.delenv("RUNEXE_WINE_PATH", raising=False)
     monkeypatch.setattr(

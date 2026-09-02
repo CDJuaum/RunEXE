@@ -20,6 +20,7 @@ from runexe.dependencies import (
     detect_dependencies,
     resolve_verbs_for_dependencies,
 )
+from runexe.graphics import detect_graphics_requirements
 from runexe.models import (
     ApplicationClassification,
     CompatibilityReport,
@@ -635,6 +636,32 @@ def analyze_compatibility(
     # ---------------------------------------------------------
 
     dependencies = detect_dependencies(executable.imports or [])
+    graphics = detect_graphics_requirements(executable.imports)
+
+    if graphics.apis:
+        notes.append("Graphics APIs detected: " + ", ".join(graphics.apis) + ".")
+    if graphics.translators:
+        notes.append("Likely translation path: " + ", ".join(graphics.translators) + ".")
+    if host is not None and graphics.vulkan_recommended:
+        if host.vulkan_available:
+            device = ", ".join(host.vulkan_devices) or "Vulkan device detected"
+            version = f" (Vulkan {host.vulkan_version})" if host.vulkan_version else ""
+            notes.append(f"Vulkan ready: {device}{version}.")
+        elif host.vulkan_available is False:
+            message = (
+                "Vulkan is unavailable, but this application is likely to use "
+                + ", ".join(graphics.translators)
+                + "."
+            )
+            if graphics.vulkan_required:
+                warnings.append(message + " Direct3D 12/native Vulkan may not run.")
+            else:
+                warnings.append(message + " Try the Proton WineD3D tuning preset.")
+        else:
+            notes.append(
+                "Vulkan readiness is unknown because vulkaninfo is unavailable; "
+                "run `runexe graphics` for setup guidance."
+            )
 
     # DXVK and VKD3D-Proton translate Direct3D 9-12 through Vulkan, and
     # Proton always relies on them, so a missing hardware Vulkan driver is
@@ -741,6 +768,7 @@ def analyze_compatibility(
         dependencies=dependencies,
         required_verbs=required_verbs,
         profile=profile,
+        graphics=graphics,
         classification_confidence=classification.confidence,
         classification_signals=classification.signals,
     )

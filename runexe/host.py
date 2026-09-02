@@ -8,6 +8,7 @@ import subprocess
 from pathlib import Path
 
 from .gpu import detect_gpu
+from .graphics import probe_vulkan
 from .models import ExecutableInfo, HostInfo
 from .platform_support import find_executable
 from .proton import discover_proton_installations
@@ -93,6 +94,7 @@ def detect_host(executable: ExecutableInfo | None = None) -> HostInfo:
             pass
 
     proton_installations = discover_proton_installations()
+    vulkan = probe_vulkan()
     gpu = detect_gpu()
 
     return HostInfo(
@@ -104,6 +106,10 @@ def detect_host(executable: ExecutableInfo | None = None) -> HostInfo:
         winetricks_installed=find_executable("winetricks") is not None,
         proton_installed=bool(proton_installations),
         proton_versions=[item.name for item in proton_installations],
+        vulkan_available=vulkan.available,
+        vulkan_version=vulkan.version,
+        vulkan_devices=list(vulkan.devices),
+        vulkan_error=vulkan.error,
         vulkan_supported=gpu.vulkan_supported,
         gpu_vendors=list(gpu.gpu_vendors),
     )

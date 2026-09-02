@@ -1,11 +1,17 @@
 """Refresh the README screenshot using a deterministic demonstration state."""
 
+# ruff: noqa: E402 - path and Qt platform bootstrapping must precede GUI imports.
+
 from __future__ import annotations
 
 import os
 import sys
 from pathlib import Path
 from tempfile import TemporaryDirectory
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 # Native Windows rendering is required for the bundled Segoe UI font.  Headless
 # Linux builders can still refresh the screenshot with Qt's offscreen backend.
@@ -43,6 +49,9 @@ def main() -> None:
         True,
         proton_installed=True,
         proton_versions=["Proton Experimental"],
+        vulkan_available=True,
+        vulkan_version="1.3.290",
+        vulkan_devices=["Example Vulkan GPU"],
     )
     compatibility = CompatibilityReport(
         application_type="Native Windows",
@@ -70,10 +79,18 @@ def main() -> None:
         )
         window.resize(1180, 790)
         window._analysis_ready(AnalysisBundle(source, executable, host, compatibility, [proton]))
-        if os.environ.get("RUNEXE_SCREENSHOT_PAGE") == "library":
+        window.show()
+        app.processEvents()
+        selected_page = os.environ.get("RUNEXE_SCREENSHOT_PAGE", "overview")
+        if selected_page == "library":
             window._library_ready(LibraryBundle(window.application_library.records(), []))
             window._show_page(2)
-        window.show()
+        elif selected_page == "runtime":
+            window._show_page(1)
+        elif selected_page == "activity":
+            window._show_page(3)
+        elif selected_page != "overview":
+            raise ValueError(f"Unknown RUNEXE_SCREENSHOT_PAGE: {selected_page}")
         app.processEvents()
         settle = QEventLoop()
         QTimer.singleShot(260, settle.quit)

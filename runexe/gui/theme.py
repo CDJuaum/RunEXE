@@ -209,6 +209,21 @@ QComboBox QAbstractItemView::item {{
 QComboBox QAbstractItemView::item:selected {{
     background: {COLORS["blue"]};
 }}
+QMenu {{
+    background: {COLORS["surface_raised"]};
+    border: 1px solid {COLORS["border"]};
+    border-radius: 8px;
+    padding: 6px;
+}}
+QMenu::item {{
+    min-width: 190px;
+    padding: 9px 14px;
+    border-radius: 6px;
+}}
+QMenu::item:selected {{
+    background: {COLORS["blue"]};
+    color: white;
+}}
 QPlainTextEdit, QListWidget {{
     background: #07101d;
     border: 1px solid {COLORS["border"]};

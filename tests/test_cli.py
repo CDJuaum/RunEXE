@@ -4,6 +4,7 @@ from typer.testing import CliRunner
 
 from runexe import __version__
 from runexe.cli import app
+from runexe.desktop import DesktopPaths
 from runexe.environments import EnvironmentInfo
 from runexe.library import ApplicationLibrary, LaunchPreset
 from runexe.models import ApplicationProfile, CompatibilityReport, ExecutableInfo, HostInfo
@@ -19,6 +20,35 @@ def test_version_comes_from_package_metadata():
 
     assert result.exit_code == 0
     assert result.stdout.strip() == f"RunEXE {__version__}"
+
+
+def test_desktop_install_command_reports_created_entry(tmp_path, monkeypatch):
+    paths = DesktopPaths(tmp_path / "runexe.desktop", tmp_path / "runexe.png")
+    seen = {}
+
+    def install(executable):
+        seen["executable"] = executable
+        return paths
+
+    monkeypatch.setattr("runexe.cli.install_desktop_entry", install)
+    result = runner.invoke(
+        app,
+        ["desktop", "install", "--executable", str(tmp_path / "runexe-gui")],
+    )
+
+    assert result.exit_code == 0
+    assert seen["executable"] == tmp_path / "runexe-gui"
+    assert paths.desktop_file.name in result.output
+
+
+def test_desktop_remove_command_is_idempotent(tmp_path, monkeypatch):
+    paths = DesktopPaths(tmp_path / "runexe.desktop", tmp_path / "runexe.png")
+    monkeypatch.setattr("runexe.cli.remove_desktop_entry", lambda: (paths, False))
+
+    result = runner.invoke(app, ["desktop", "remove"])
+
+    assert result.exit_code == 0
+    assert "No RunEXE-managed desktop entry" in result.output
 
 
 def test_json_analysis_is_machine_readable(tmp_path):
@@ -162,7 +192,11 @@ def test_environment_command_and_removal_confirmation(tmp_path, monkeypatch):
         source=str(tmp_path / "app.exe"),
         architecture="x86_64",
         runtime="Wine 11",
+        runtime_path=None,
         windows_version="11",
+        dxvk_available=False,
+        dxvk_source="Wine prefix",
+        dxvk_components=(),
         size_bytes=2048,
         modified_at=datetime.now(timezone.utc).isoformat(),
         ready=True,
@@ -197,10 +231,22 @@ def test_rerun_restores_saved_cli_preset(tmp_path, monkeypatch):
     )
     seen = {}
 
-    def fake_run(ctx, file, backend, proton, prefix, dependencies, winver, timeout, verbose):
+    def fake_run(
+        ctx,
+        file,
+        backend,
+        proton,
+        tuning,
+        prefix,
+        dependencies,
+        winver,
+        timeout,
+        verbose,
+    ):
         seen.update(
             file=file,
             backend=backend,
+            tuning=tuning,
             dependencies=dependencies,
             winver=winver,
             arguments=list(ctx.args),
@@ -214,6 +260,7 @@ def test_rerun_restores_saved_cli_preset(tmp_path, monkeypatch):
     assert result.exit_code == 0
     assert seen["file"] == source.resolve()
     assert seen["backend"].value == "wine"
+    assert seen["tuning"].value == "default"
     assert seen["dependencies"] is False
     assert seen["winver"] == "11"
     assert seen["arguments"] == ["--portable", "two words"]

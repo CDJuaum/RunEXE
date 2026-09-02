@@ -37,6 +37,13 @@ def test_desktop_shell_has_expandable_pages(qt_app):
     ]
     assert window.minimumWidth() <= 920
     assert not window.launch_button.isEnabled()
+    assert [action.text() for action in window.environment_configure_menu.actions()] == [
+        "Wine settings",
+        "Registry editor",
+        "Windows control panel",
+        "Installed applications",
+        "Wine file explorer",
+    ]
     window.deleteLater()
 
 
