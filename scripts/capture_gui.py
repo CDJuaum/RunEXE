@@ -18,7 +18,7 @@ if str(PROJECT_ROOT) not in sys.path:
 if sys.platform != "win32" and not os.environ.get("DISPLAY"):
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QEventLoop, QTimer
+from PySide6.QtCore import QEventLoop, QSettings, QTimer
 from PySide6.QtWidgets import QApplication
 
 from runexe.gui.theme import apply_theme
@@ -73,11 +73,16 @@ def main() -> None:
     )
 
     with TemporaryDirectory(prefix="runexe-screenshot-") as temporary:
+        QSettings.setDefaultFormat(QSettings.Format.IniFormat)
+        QSettings.setPath(QSettings.Format.IniFormat, QSettings.Scope.UserScope, temporary)
         window = RunEXEWindow(
             auto_refresh=False,
             application_library=ApplicationLibrary(Path(temporary) / "library.json"),
         )
-        window.resize(1180, 790)
+        window.resize(
+            int(os.environ.get("RUNEXE_SCREENSHOT_WIDTH", "1180")),
+            int(os.environ.get("RUNEXE_SCREENSHOT_HEIGHT", "790")),
+        )
         window._analysis_ready(AnalysisBundle(source, executable, host, compatibility, [proton]))
         window.show()
         app.processEvents()

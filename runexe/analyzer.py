@@ -38,13 +38,17 @@ def _read_c_string(file: BinaryIO, offset: int, file_size: int) -> str | None:
         return None
     file.seek(offset)
     raw = bytearray()
-    for _ in range(min(MAX_NAME_BYTES, file_size - offset)):
-        byte = file.read(1)
-        if byte == b"\x00":
-            return raw.decode("ascii", errors="replace") if raw else None
-        if not byte:
+    remaining = min(MAX_NAME_BYTES, file_size - offset)
+    while remaining:
+        chunk = file.read(min(128, remaining))
+        if not chunk:
             break
-        raw.extend(byte)
+        terminator = chunk.find(b"\x00")
+        if terminator >= 0:
+            raw.extend(chunk[:terminator])
+            return raw.decode("ascii", errors="replace") if raw else None
+        raw.extend(chunk)
+        remaining -= len(chunk)
     return None
 
 

@@ -11,7 +11,7 @@ from .gpu import detect_gpu
 from .graphics import probe_vulkan
 from .models import ExecutableInfo, HostInfo
 from .platform_support import find_executable
-from .proton import discover_proton_installations
+from .proton import ProtonInstallation, discover_proton_installations
 
 
 def _normalize_architecture(value: str) -> str:
@@ -62,11 +62,17 @@ def _wine_supports_32bit_prefix(wine_binary: str) -> bool | None:
     return None
 
 
-def detect_host(executable: ExecutableInfo | None = None) -> HostInfo:
+def detect_host(
+    executable: ExecutableInfo | None = None,
+    *,
+    proton_installations: list[ProtonInstallation] | None = None,
+) -> HostInfo:
     """Detect host capabilities without initializing a temporary prefix.
 
     ``executable`` remains accepted for API compatibility but detection is
     host-wide. Actual prefix support is ultimately validated during launch.
+    Callers that also need the installation list can supply a fresh discovery
+    result to avoid scanning Steam libraries twice. An empty list is authoritative.
     """
 
     del executable
@@ -93,7 +99,8 @@ def detect_host(executable: ExecutableInfo | None = None) -> HostInfo:
         except (subprocess.TimeoutExpired, OSError):
             pass
 
-    proton_installations = discover_proton_installations()
+    if proton_installations is None:
+        proton_installations = discover_proton_installations()
     vulkan = probe_vulkan()
     gpu = detect_gpu()
 

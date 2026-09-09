@@ -53,7 +53,7 @@ build-backend = "setuptools.build_meta"
 include = ["runexe*"]
 
 [tool.setuptools.package-data]
-runexe = ["assets/*.png"]
+runexe = ["assets/*.png", "assets/*.svg"]
 
 [tool.pytest.ini_options]
 addopts = "-ra"
