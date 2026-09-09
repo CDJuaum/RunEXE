@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QApplication
 
 from runexe.analyzer import analyze_executable
 from runexe.compatibility import analyze_compatibility
-from runexe.gui.widgets import DropZone, SmoothScrollArea
+from runexe.gui.widgets import DropZone, MetricCard, MetricGrid, SmoothScrollArea
 from runexe.gui.window import AnalysisBundle, LibraryBundle, RunEXEWindow
 from runexe.library import ApplicationLibrary, LaunchPreset
 from runexe.models import HostInfo
@@ -47,6 +47,43 @@ def test_desktop_shell_has_expandable_pages(qt_app):
     window.deleteLater()
 
 
+def test_navigation_reuses_animation(qt_app):
+    from PySide6.QtCore import QVariantAnimation
+
+    window = RunEXEWindow(auto_refresh=False)
+    window._show_page(1)
+    animation = window._page_animation
+    count = len(window.findChildren(QVariantAnimation))
+    for index in range(100):
+        window._show_page(index % 4)
+    assert window._page_animation is animation
+    assert len(window.findChildren(QVariantAnimation)) == count
+    window.deleteLater()
+
+
+def test_runtime_refresh_uses_one_installation_snapshot(qt_app, monkeypatch):
+    window = RunEXEWindow(auto_refresh=False)
+    installations = []
+    discoveries = []
+    host = HostInfo("x86_64", False, None, None, None, False)
+
+    def discover():
+        discoveries.append(True)
+        return installations
+
+    def detect(*, proton_installations):
+        assert proton_installations is installations
+        return host
+
+    monkeypatch.setattr("runexe.gui.window.discover_proton_installations", discover)
+    monkeypatch.setattr("runexe.gui.window.detect_host", detect)
+    monkeypatch.setattr(window, "_start_task", lambda key, label, run, done: done(run()))
+    window.refresh_runtimes()
+    assert len(discoveries) == 1
+    assert window.host is host
+    window.deleteLater()
+
+
 def test_analysis_updates_readiness_and_runtime_state(qt_app, tmp_path):
     path = make_pe(tmp_path / "sample.exe", machine=0x014C)
     executable = analyze_executable(path)
@@ -77,6 +114,26 @@ def test_drop_zone_elides_long_paths(qt_app, tmp_path):
     assert zone.toolTip() == str(path)
     assert len(zone.subtitle.text()) < len(str(path))
     zone.deleteLater()
+
+
+def test_summary_cards_reflow_without_losing_widgets(qt_app):
+    cards = [MetricCard(caption) for caption in ("Format", "Architecture", "Runtime", "Readiness")]
+    grid = MetricGrid(cards)
+    grid.resize(900, 220)
+    grid.show()
+    qt_app.processEvents()
+    assert grid.layout().itemAtPosition(0, 3).widget() is cards[3]
+
+    grid.resize(620, 300)
+    qt_app.processEvents()
+    assert grid.layout().itemAtPosition(1, 1).widget() is cards[3]
+    assert grid.layout().count() == 4
+
+    grid.resize(900, 220)
+    qt_app.processEvents()
+    assert grid.layout().itemAtPosition(0, 3).widget() is cards[3]
+    grid.close()
+    grid.deleteLater()
 
 
 def test_paint_net_profile_applies_windows_11_setup(qt_app, tmp_path):

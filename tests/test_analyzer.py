@@ -1,12 +1,35 @@
 import struct
 import zipfile
+from io import BytesIO
 
-from runexe.analyzer import analyze_executable
+import pytest
+
+from runexe.analyzer import MAX_NAME_BYTES, _read_c_string, analyze_executable
 from runexe.models import PESection
 from runexe.packages import PackageError
 from runexe.pe_utils import rva_range_to_file_offset, rva_to_file_offset
 
 from .helpers import make_pe
+
+
+@pytest.mark.parametrize("length", [1, 127, 128, 129, MAX_NAME_BYTES - 1])
+def test_import_names_across_read_boundaries(length):
+    raw = b"prefix" + b"A" * length + b"\0ignored"
+    assert _read_c_string(BytesIO(raw), 6, len(raw)) == "A" * length
+
+
+@pytest.mark.parametrize(
+    ("raw", "size", "expected"),
+    [
+        (b"\0", 1, None),
+        (b"unterminated", 12, None),
+        (b"name\0", 4, None),
+        (b"A" * MAX_NAME_BYTES + b"\0", MAX_NAME_BYTES + 1, None),
+        (b"A\xff\0", 3, "A\ufffd"),
+    ],
+)
+def test_import_names_keep_bounds_and_decoding(raw, size, expected):
+    assert _read_c_string(BytesIO(raw), 0, size) == expected
 
 
 def test_analyzes_minimal_pe_and_imports(tmp_path):
