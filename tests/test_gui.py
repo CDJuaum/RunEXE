@@ -103,6 +103,87 @@ def test_analysis_updates_readiness_and_runtime_state(qt_app, tmp_path):
     window.deleteLater()
 
 
+def test_failed_new_analysis_cannot_launch_previous_app(qt_app, tmp_path, monkeypatch):
+    valid = make_pe(tmp_path / "valid.exe")
+    executable = analyze_executable(valid)
+    host = HostInfo("x86_64", True, "wine-11", True, True, True)
+    window = RunEXEWindow(
+        auto_refresh=False,
+        application_library=ApplicationLibrary(tmp_path / "library.json"),
+    )
+    window._analysis_ready(
+        AnalysisBundle(valid, executable, host, analyze_compatibility(executable, host), [])
+    )
+    assert window.launch_button.isEnabled()
+    invalid = tmp_path / "invalid.exe"
+    invalid.write_bytes(b"not an executable")
+    monkeypatch.setattr(window.thread_pool, "start", lambda worker: worker.run())
+    monkeypatch.setattr("runexe.gui.window.QMessageBox.critical", lambda *args: None)
+
+    window.analyze_path(invalid)
+
+    assert window.executable is None
+    assert window.compatibility is None
+    assert window.drop_zone.path == invalid.resolve()
+    assert not window.launch_button.isEnabled()
+    assert not window.prepare_button.isEnabled()
+    assert window.readiness_metric.value.text() == "Analysis failed"
+    assert str(valid) not in window.environment_preview.text()
+    window.deleteLater()
+
+
+def test_overlapping_analysis_does_not_change_selected_file(qt_app, tmp_path):
+    window = RunEXEWindow(auto_refresh=False)
+    original = tmp_path / "original.exe"
+    window.source_path = original
+    window.drop_zone.set_path(original)
+    window._workers["analysis"] = object()
+    window.analyze_path(tmp_path / "second.exe")
+    assert window.source_path == original
+    assert window.drop_zone.path == original
+    window._workers.clear()
+    window.deleteLater()
+
+
+def test_startup_runtime_detection_does_not_discard_initial_file(qt_app, tmp_path, monkeypatch):
+    window = RunEXEWindow(auto_refresh=False)
+    window._workers["runtimes"] = object()
+    tasks = []
+    monkeypatch.setattr(window, "_start_task", lambda key, *args: tasks.append(key))
+    source = tmp_path / "initial.exe"
+    window.analyze_path(source)
+    assert tasks == ["analysis"]
+    assert window.source_path == source.resolve()
+    window._workers.clear()
+    window.deleteLater()
+
+
+def test_library_search_and_refresh_preserve_selection(qt_app, tmp_path):
+    library = ApplicationLibrary(tmp_path / "library.json")
+    for name in ("Editor", "Calculator"):
+        library.remember_analysis(
+            tmp_path / f"{name}.exe", display_name=name, architecture="x86", file_format="PE32"
+        )
+    window = RunEXEWindow(auto_refresh=False, application_library=library)
+    bundle = LibraryBundle(library.records(), [])
+    window._library_ready(bundle)
+    window.library_search.setText("EDITOR")
+    matches = [
+        window.recent_list.item(i) for i in range(2) if not window.recent_list.item(i).isHidden()
+    ]
+    assert len(matches) == 1
+    window.recent_list.setCurrentItem(matches[0])
+    window._library_ready(bundle)
+    assert "Editor" in window.recent_list.currentItem().text()
+    assert window.recent_open_button.isEnabled()
+    window.library_search.setText("no match")
+    assert not window.recent_open_button.isEnabled()
+    assert window.library_empty.text() == "No applications match your search."
+    window.library_search.clear()
+    assert window.recent_open_button.isEnabled()
+    window.deleteLater()
+
+
 def test_drop_zone_elides_long_paths(qt_app, tmp_path):
     zone = DropZone()
     zone.resize(340, 150)

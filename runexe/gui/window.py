@@ -654,6 +654,14 @@ class RunEXEWindow(QMainWindow):
         self.library_refresh_button.clicked.connect(self.refresh_library)
         recent_header.addWidget(self.library_refresh_button)
         recent_layout.addLayout(recent_header)
+        self.library_search = QLineEdit()
+        self.library_search.setPlaceholderText("Search applications by name or path")
+        self.library_search.setAccessibleName("Search application library")
+        self.library_search.setClearButtonEnabled(True)
+        self.library_search.textChanged.connect(self._filter_library)
+        recent_layout.addWidget(self.library_search)
+        self.library_empty = _muted("Your recent applications will appear here after analysis.")
+        recent_layout.addWidget(self.library_empty)
         self.recent_list = QListWidget()
         self.recent_list.setMinimumHeight(190)
         self.recent_list.itemDoubleClicked.connect(lambda _item: self.open_recent_application())
@@ -906,6 +914,8 @@ class RunEXEWindow(QMainWindow):
             self._set_header_status("Ready to launch", "ready")
         elif analyzed:
             self._set_header_status("Action required", "error")
+        elif self.source_path is not None:
+            self._set_header_status("Analysis required", "warning")
         elif self.host is not None:
             runtime_available = self.host.wine_installed or self.host.proton_installed
             self._set_header_status(
@@ -1043,6 +1053,13 @@ class RunEXEWindow(QMainWindow):
         self._start_task("library", "Refreshing application library", load, self._library_ready)
 
     def _library_ready(self, bundle: LibraryBundle) -> None:
+        lists = (self.recent_list, self.environment_list, self.backup_list)
+        selections = [
+            widget.currentItem().data(Qt.ItemDataRole.UserRole) if widget.currentItem() else None
+            for widget in lists
+        ]
+        scroll_positions = [widget.verticalScrollBar().value() for widget in lists]
+        blockers = [QSignalBlocker(widget) for widget in lists]
         self._managed_environments = bundle.environments
         self._managed_backups = bundle.backups
         self.recent_list.clear()
@@ -1121,6 +1138,31 @@ class RunEXEWindow(QMainWindow):
             f"{len(bundle.backups)} restorable snapshot(s)",
             "success" if bundle.backups else "neutral",
         )
+        for widget, selected, scroll in zip(lists, selections, scroll_positions, strict=True):
+            for index in range(widget.count()):
+                item = widget.item(index)
+                if item.data(Qt.ItemDataRole.UserRole) == selected:
+                    widget.setCurrentItem(item)
+                    break
+            widget.verticalScrollBar().setValue(scroll)
+        del blockers
+        self._filter_library()
+        self._update_library_actions()
+
+    def _filter_library(self) -> None:
+        query = self.library_search.text().strip().casefold()
+        visible = 0
+        for index in range(self.recent_list.count()):
+            item = self.recent_list.item(index)
+            matches = query in item.text().casefold()
+            item.setHidden(not matches)
+            visible += int(matches)
+        self.library_empty.setText(
+            "No applications match your search."
+            if self.recent_list.count()
+            else "Your recent applications will appear here after analysis."
+        )
+        self.library_empty.setVisible(visible == 0)
         self._update_library_actions()
 
     def _selected_environment(self) -> EnvironmentInfo | None:
@@ -1159,7 +1201,8 @@ class RunEXEWindow(QMainWindow):
             & self._workers.keys()
         )
         running = self._application_running()
-        recent_selected = self.recent_list.currentItem() is not None
+        recent_item = self.recent_list.currentItem()
+        recent_selected = recent_item is not None and not recent_item.isHidden()
         environment_selected = self._selected_environment() is not None
         backup_selected = self._selected_backup() is not None
         self.recent_open_button.setEnabled(recent_selected and not busy and not running)
@@ -1470,6 +1513,9 @@ class RunEXEWindow(QMainWindow):
 
     def _update_environment_preview(self) -> None:
         if self.executable is None or self.compatibility is None:
+            self.environment_preview.setText(
+                "Select and analyze an application to preview its environment."
+            )
             return
         custom = self.prefix_input.text().strip()
         if custom:
@@ -1493,7 +1539,9 @@ class RunEXEWindow(QMainWindow):
             return
         worker = Worker(function)
         worker.signals.result.connect(on_result)
-        worker.signals.error.connect(self._task_failed)
+        worker.signals.error.connect(
+            self._analysis_failed if key == "analysis" else self._task_failed
+        )
         worker.signals.finished.connect(lambda: self._task_finished(key))
         self._workers[key] = worker
         self.task_status.setText(label)
@@ -1505,6 +1553,14 @@ class RunEXEWindow(QMainWindow):
         self._log(f"ERROR: {message}")
         self._log(details.rstrip())
         QMessageBox.critical(self, "RunEXE could not complete the action", message)
+
+    def _analysis_failed(self, message: str, details: str) -> None:
+        self.readiness_metric.set_data("Analysis failed", "Choose another file or retry", "error")
+        for metric in (self.format_metric, self.arch_metric, self.runtime_metric):
+            metric.set_data("Unavailable", "Analysis did not complete")
+        self.guidance_list.clear()
+        self.guidance_list.addItem(message)
+        self._task_failed(message, details)
 
     def _task_finished(self, key: str) -> None:
         self._workers.pop(key, None)
@@ -1547,6 +1603,9 @@ class RunEXEWindow(QMainWindow):
         self.analyze_path(self.drop_zone.path)
 
     def analyze_path(self, path: Path) -> None:
+        # Keyboard shortcuts and drops can arrive even when action buttons are disabled.
+        if any(key not in {"library", "runtimes"} for key in self._workers):
+            return
         if self._application_running():
             QMessageBox.information(
                 self,
@@ -1557,6 +1616,20 @@ class RunEXEWindow(QMainWindow):
         resolved = path.expanduser().resolve()
         self.source_path = resolved
         self.drop_zone.set_path(resolved)
+        self.executable = None
+        self.compatibility = None
+        self.profile_card.hide()
+        self.detail_path.setText(str(resolved))
+        for label in (self.detail_product, self.detail_subsystem, self.detail_dependencies):
+            label.setText("Not analyzed")
+        for metric in (self.format_metric, self.arch_metric, self.runtime_metric):
+            metric.set_data("Pending", "Waiting for analysis")
+        self.readiness_metric.set_data("Analyzing", "Checking the selected file", "warning")
+        self.guidance_list.clear()
+        self.guidance_list.addItem("Analysis is in progress. Launch is available after validation.")
+        self.environment_status.setText("Awaiting analysis")
+        self._update_environment_preview()
+        self._update_controls()
         saved_record = self.application_library.get(resolved)
         if saved_record is not None:
             preference = saved_record.preset.backend

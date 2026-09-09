@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from runexe.library import ApplicationLibrary, LaunchPreset
 
 
@@ -41,8 +43,34 @@ def test_library_recovers_from_corrupt_or_oversized_state(tmp_path):
 
     assert library.records() == []
 
+    state.write_bytes(b"\xff\xfe\x80")
+    assert library.records() == []
+
     state.write_text("x" * (2 * 1024 * 1024 + 1), encoding="utf-8")
     assert library.records() == []
+
+
+@pytest.mark.parametrize("invalid", [[], {}, ["wine"], 42, True])
+def test_malformed_preferences_fall_back_without_losing_record(tmp_path, invalid):
+    state = tmp_path / "applications.json"
+    state.write_text(
+        json.dumps(
+            {
+                "applications": [
+                    {
+                        "path": str(tmp_path / "app.exe"),
+                        "preset": dict.fromkeys(
+                            ("backend", "windows_version", "proton_tuning", "dependencies"), invalid
+                        ),
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    records = ApplicationLibrary(state).records()
+    assert len(records) == 1
+    assert records[0].preset == LaunchPreset()
 
 
 def test_library_prunes_missing_files_without_touching_existing_sources(tmp_path):

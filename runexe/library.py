@@ -48,20 +48,28 @@ class LaunchPreset:
         backend = value.get("backend")
         dependencies = value.get("dependencies")
         return cls(
-            backend=backend if backend in {"auto", "wine", "proton"} else "auto",
+            backend=backend
+            if isinstance(backend, str) and backend in {"auto", "wine", "proton"}
+            else "auto",
             proton=value.get("proton") if isinstance(value.get("proton"), str) else None,
             proton_tuning=(
                 value.get("proton_tuning")
-                if value.get("proton_tuning")
+                if isinstance(value.get("proton_tuning"), str)
+                and value.get("proton_tuning")
                 in {"default", "diagnostics", "wined3d", "dxvk-hud", "no-fsync", "no-ntsync"}
                 else "default"
             ),
             windows_version=(
                 value.get("windows_version")
-                if value.get("windows_version") in {"7", "8", "8.1", "10", "11"}
+                if isinstance(value.get("windows_version"), str)
+                and value.get("windows_version") in {"7", "8", "8.1", "10", "11"}
                 else None
             ),
-            dependencies=(dependencies if dependencies in {"auto", "install", "skip"} else "auto"),
+            dependencies=(
+                dependencies
+                if isinstance(dependencies, str) and dependencies in {"auto", "install", "skip"}
+                else "auto"
+            ),
             prefix=value.get("prefix") if isinstance(value.get("prefix"), str) else None,
             arguments=value.get("arguments") if isinstance(value.get("arguments"), str) else "",
         )
@@ -129,7 +137,7 @@ class ApplicationLibrary:
             if self.path.stat().st_size > MAX_LIBRARY_BYTES:
                 return []
             value = json.loads(self.path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+        except (OSError, UnicodeError, json.JSONDecodeError):
             return []
         applications = value.get("applications") if isinstance(value, dict) else None
         if not isinstance(applications, list):
