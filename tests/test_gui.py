@@ -11,10 +11,17 @@ from PySide6.QtWidgets import QApplication
 
 from runexe.analyzer import analyze_executable
 from runexe.compatibility import analyze_compatibility
-from runexe.gui.widgets import DropZone, MetricCard, MetricGrid, SmoothScrollArea
+from runexe.gui.widgets import (
+    DropZone,
+    MetricCard,
+    MetricGrid,
+    NavigationRail,
+    SmoothScrollArea,
+)
 from runexe.gui.window import AnalysisBundle, LibraryBundle, RunEXEWindow
 from runexe.library import ApplicationLibrary, LaunchPreset
 from runexe.models import HostInfo
+from runexe.proton import ProtonInstallation
 
 from .helpers import make_pe
 
@@ -29,6 +36,7 @@ def test_desktop_shell_has_expandable_pages(qt_app):
     window = RunEXEWindow(auto_refresh=False)
 
     assert window.pages.count() == 4
+    assert isinstance(window.navigation, NavigationRail)
     assert [window.navigation.tabText(index) for index in range(4)] == [
         "Overview",
         "Runtime setup",
@@ -41,6 +49,8 @@ def test_desktop_shell_has_expandable_pages(qt_app):
     assert window.overview_details.isHidden()
     assert window.arguments_card.isHidden()
     assert not window.drop_zone.isHidden()
+    assert window.install_proton_button.text() == "Install Proton"
+    assert window.install_vulkan_button.text() == "Install Vulkan tools"
     assert [action.text() for action in window.environment_configure_menu.actions()] == [
         "Wine settings",
         "Registry editor",
@@ -51,7 +61,7 @@ def test_desktop_shell_has_expandable_pages(qt_app):
     window.deleteLater()
 
 
-def test_navigation_updates_immediately_without_adding_animations(qt_app):
+def test_navigation_reuses_one_lightweight_page_animation(qt_app):
     from PySide6.QtCore import QVariantAnimation
 
     window = RunEXEWindow(auto_refresh=False)
@@ -62,6 +72,69 @@ def test_navigation_updates_immediately_without_adding_animations(qt_app):
         assert window.pages.currentIndex() == index % 4
     assert len(window.findChildren(QVariantAnimation)) == count
     assert not window.format_metric.findChildren(QVariantAnimation)
+    window.deleteLater()
+
+
+def test_navigation_rail_compacts_without_losing_accessible_labels(qt_app):
+    window = RunEXEWindow(auto_refresh=False)
+    window.resize(920, 680)
+    window.show()
+    qt_app.processEvents()
+    assert window.navigation.isCompact()
+    buttons = window.navigation.findChildren(type(window.browse_button), "navButton")
+    assert [button.accessibleName() for button in buttons] == [
+        "Overview",
+        "Runtime setup",
+        "Library",
+        "Activity",
+    ]
+    assert all(not button.text() for button in buttons)
+
+    window.resize(1180, 790)
+    qt_app.processEvents()
+    assert not window.navigation.isCompact()
+    assert [button.text() for button in buttons] == [
+        "Overview",
+        "Runtime setup",
+        "Library",
+        "Activity",
+    ]
+    window.close()
+    window.deleteLater()
+
+
+def test_runtime_setup_actions_use_background_provisioning_hooks(qt_app, tmp_path, monkeypatch):
+    window = RunEXEWindow(auto_refresh=False)
+    proton_dir = tmp_path / "GE-Proton"
+    proton_dir.mkdir()
+    proton_script = proton_dir / "proton"
+    proton_script.touch()
+    installation = ProtonInstallation("GE-Proton", proton_script, None, tmp_path)
+    tasks = []
+    refreshes = []
+    vulkan_components = []
+
+    monkeypatch.setattr("runexe.gui.window.install_managed_proton", lambda: installation)
+    monkeypatch.setattr(
+        "runexe.gui.window.install_system_component",
+        lambda component: vulkan_components.append(component) or object(),
+    )
+    monkeypatch.setattr(window, "refresh_runtimes", lambda: refreshes.append(True))
+
+    def run_task(key, label, function, on_result):
+        tasks.append((key, label))
+        on_result(function())
+
+    monkeypatch.setattr(window, "_start_task", run_task)
+
+    window.install_proton_button.click()
+    window.install_vulkan_button.click()
+
+    assert [key for key, _label in tasks] == ["install-proton", "install-vulkan"]
+    assert vulkan_components == ["vulkan"]
+    assert refreshes == [True, True]
+    assert "Managed Proton ready" in window.activity_log.toPlainText()
+    assert "Vulkan tools installation completed" in window.activity_log.toPlainText()
     window.deleteLater()
 
 

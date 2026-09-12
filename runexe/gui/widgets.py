@@ -7,8 +7,12 @@ from pathlib import Path
 from PySide6.QtCore import (
     QAbstractAnimation,
     QEasingCurve,
+    QPoint,
+    QPropertyAnimation,
+    QRect,
     QSize,
     Qt,
+    QTimer,
     QVariantAnimation,
     Signal,
 )
@@ -28,8 +32,10 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QPushButton,
     QScrollArea,
     QScroller,
+    QStackedWidget,
     QStyle,
     QVBoxLayout,
     QWidget,
@@ -46,6 +52,168 @@ def navigation_icon(kind: int) -> QIcon:
         QStyle.StandardPixmap.SP_FileDialogDetailedView,
     )
     return QIcon.fromTheme(names[kind], QApplication.style().standardIcon(fallbacks[kind]))
+
+
+class NavigationRail(QFrame):
+    """Compactable sidebar navigation with a lightweight animated selection marker."""
+
+    currentChanged = Signal(int)
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("navigationRail")
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
+        self.setAccessibleName("Main navigation")
+        self._buttons: list[QPushButton] = []
+        self._labels: list[str] = []
+        self._tooltips: list[str] = []
+        self._current_index = -1
+        self._compact = False
+
+        self._layout = QVBoxLayout(self)
+        self._layout.setContentsMargins(0, 0, 0, 0)
+        self._layout.setSpacing(5)
+        self._layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        self._indicator = QFrame(self)
+        self._indicator.setObjectName("navIndicator")
+        self._indicator.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
+        self._indicator.hide()
+        self._indicator_animation = QPropertyAnimation(self._indicator, b"geometry", self)
+        self._indicator_animation.setDuration(140)
+        self._indicator_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+    def addTab(self, icon: QIcon, text: str) -> int:  # noqa: N802 - mirrors QTabBar's API
+        index = len(self._buttons)
+        button = QPushButton(icon, text, self)
+        button.setObjectName("navButton")
+        button.setCheckable(True)
+        button.setAutoExclusive(True)
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
+        button.setIconSize(QSize(19, 19))
+        button.setAccessibleName(text)
+        button.clicked.connect(
+            lambda _checked=False, selected=index: self.setCurrentIndex(selected)
+        )
+        self._buttons.append(button)
+        self._labels.append(text)
+        self._tooltips.append("")
+        self._layout.addWidget(button)
+        if self._current_index < 0:
+            self._current_index = 0
+            button.setChecked(True)
+            QTimer.singleShot(0, lambda: self._place_indicator(0, animate=False))
+        return index
+
+    def tabText(self, index: int) -> str:  # noqa: N802 - compatibility with QTabBar callers
+        return self._labels[index]
+
+    def setTabToolTip(self, index: int, text: str) -> None:  # noqa: N802
+        self._tooltips[index] = text
+        self._buttons[index].setToolTip(text)
+
+    def currentIndex(self) -> int:  # noqa: N802
+        return self._current_index
+
+    def setCurrentIndex(self, index: int) -> None:  # noqa: N802
+        if not 0 <= index < len(self._buttons):
+            return
+        changed = index != self._current_index
+        self._current_index = index
+        self._buttons[index].setChecked(True)
+        self._place_indicator(index, animate=self.isVisible())
+        if changed:
+            self.currentChanged.emit(index)
+
+    def setCompact(self, compact: bool) -> None:  # noqa: N802
+        if self._compact == compact:
+            return
+        self._compact = compact
+        for index, button in enumerate(self._buttons):
+            button.setText("" if compact else self._labels[index])
+            button.setToolTip(self._tooltips[index] or self._labels[index])
+            button.setAccessibleName(self._labels[index])
+        QTimer.singleShot(0, lambda: self._place_indicator(self._current_index, animate=False))
+
+    def isCompact(self) -> bool:  # noqa: N802
+        return self._compact
+
+    def _indicator_geometry(self, index: int) -> QRect:
+        button = self._buttons[index]
+        height = max(18, button.height() - 16)
+        return QRect(1, button.y() + (button.height() - height) // 2, 3, height)
+
+    def _place_indicator(self, index: int, *, animate: bool) -> None:
+        if not 0 <= index < len(self._buttons):
+            return
+        target = self._indicator_geometry(index)
+        self._indicator_animation.stop()
+        if not self._indicator.isVisible() or not animate:
+            self._indicator.setGeometry(target)
+            self._indicator.show()
+            self._indicator.raise_()
+            return
+        self._indicator_animation.setStartValue(self._indicator.geometry())
+        self._indicator_animation.setEndValue(target)
+        self._indicator_animation.start()
+        self._indicator.raise_()
+
+    def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802 - Qt API
+        self._place_indicator(self._current_index, animate=False)
+        super().resizeEvent(event)
+
+    def keyPressEvent(self, event: QKeyEvent) -> None:  # noqa: N802 - Qt API
+        if not self._buttons:
+            super().keyPressEvent(event)
+            return
+        if event.key() in {Qt.Key.Key_Down, Qt.Key.Key_Right}:
+            self.setCurrentIndex((self._current_index + 1) % len(self._buttons))
+            event.accept()
+            return
+        if event.key() in {Qt.Key.Key_Up, Qt.Key.Key_Left}:
+            self.setCurrentIndex((self._current_index - 1) % len(self._buttons))
+            event.accept()
+            return
+        if event.key() == Qt.Key.Key_Home:
+            self.setCurrentIndex(0)
+            event.accept()
+            return
+        if event.key() == Qt.Key.Key_End:
+            self.setCurrentIndex(len(self._buttons) - 1)
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+
+class AnimatedStackedWidget(QStackedWidget):
+    """Stacked pages with one reusable, GPU-cheap position transition."""
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setObjectName("pageStack")
+        self._transition = QPropertyAnimation(None, b"pos", self)
+        self._transition.setDuration(125)
+        self._transition.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+    @property
+    def transition_animation(self) -> QPropertyAnimation:
+        return self._transition
+
+    def show_page(self, index: int) -> None:
+        if not 0 <= index < self.count():
+            return
+        if self.currentIndex() == index:
+            return
+        self._transition.stop()
+        self.setCurrentIndex(index)
+        page = self.currentWidget()
+        if page is None or not self.isVisible():
+            return
+        end = page.pos()
+        self._transition.setTargetObject(page)
+        self._transition.setStartValue(QPoint(end.x() + 10, end.y()))
+        self._transition.setEndValue(end)
+        self._transition.start()
 
 
 class MetricGrid(QWidget):

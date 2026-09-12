@@ -3,18 +3,34 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
+import shutil
+import tarfile
+import tempfile
+import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 PROTON_COMPAT_DIR = (
     Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "runexe" / "proton"
+)
+GE_PROTON_LATEST_RELEASE_URL = (
+    "https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/latest"
 )
 
 
 class ProtonError(RuntimeError):
     """Raised when Proton cannot be discovered or configured."""
+
+
+def managed_proton_root() -> Path:
+    """Return the user-owned directory used for RunEXE-managed Proton builds."""
+
+    data_home = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+    return data_home / "runexe" / "runtimes" / "proton"
 
 
 @dataclass(frozen=True)
@@ -180,6 +196,13 @@ def discover_proton_installations() -> list[ProtonInstallation]:
         if installation:
             installations[installation.script] = installation
 
+    managed_root = managed_proton_root()
+    if managed_root.is_dir():
+        for script in managed_root.glob("*/proton"):
+            installation = _from_script(script, managed_root)
+            if installation:
+                installations[installation.script] = installation
+
     for steam_root in steam_roots:
         for library in _library_roots(steam_root):
             common = library / "steamapps" / "common"
@@ -214,6 +237,151 @@ def discover_proton_installations() -> list[ProtonInstallation]:
     return sorted(installations.values(), key=_version_key, reverse=True)
 
 
+def _github_json(url: str) -> dict[str, Any]:
+    request = urllib.request.Request(
+        url,
+        headers={"Accept": "application/vnd.github+json", "User-Agent": "RunEXE"},
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            payload = response.read(2 * 1024 * 1024 + 1)
+    except OSError as error:
+        raise ProtonError(f"Could not query GE-Proton releases: {error}") from error
+    if len(payload) > 2 * 1024 * 1024:
+        raise ProtonError("GE-Proton release metadata was unexpectedly large.")
+    try:
+        parsed = json.loads(payload)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ProtonError("GitHub returned invalid GE-Proton release metadata.") from error
+    if not isinstance(parsed, dict):
+        raise ProtonError("GitHub returned invalid GE-Proton release metadata.")
+    return parsed
+
+
+def _latest_ge_proton_asset() -> tuple[str, str]:
+    release = _github_json(GE_PROTON_LATEST_RELEASE_URL)
+    tag = release.get("tag_name")
+    assets = release.get("assets")
+    if not isinstance(tag, str) or not tag.strip() or not isinstance(assets, list):
+        raise ProtonError("The latest GE-Proton release metadata is incomplete.")
+
+    for asset in assets:
+        if not isinstance(asset, dict):
+            continue
+        name = asset.get("name")
+        url = asset.get("browser_download_url")
+        if (
+            isinstance(name, str)
+            and isinstance(url, str)
+            and name.endswith(".tar.gz")
+            and "sha512" not in name.lower()
+        ):
+            normalized_tag = tag.strip()
+            if not re.fullmatch(r"[A-Za-z0-9._+-]+", normalized_tag):
+                raise ProtonError("The latest GE-Proton release tag is unsafe for a local path.")
+            return normalized_tag, url
+    raise ProtonError("The latest GE-Proton release does not contain a .tar.gz runtime asset.")
+
+
+def _download_file(url: str, destination: Path, *, max_bytes: int = 4 * 1024**3) -> None:
+    request = urllib.request.Request(url, headers={"User-Agent": "RunEXE"})
+    try:
+        with (
+            urllib.request.urlopen(request, timeout=60) as response,
+            destination.open("wb") as output,
+        ):
+            total = 0
+            while chunk := response.read(1024 * 1024):
+                total += len(chunk)
+                if total > max_bytes:
+                    raise ProtonError("GE-Proton download exceeded the safety size limit.")
+                output.write(chunk)
+    except ProtonError:
+        raise
+    except OSError as error:
+        raise ProtonError(f"Could not download GE-Proton: {error}") from error
+
+
+def _validate_tar_member(member: tarfile.TarInfo, destination: Path) -> None:
+    root = destination.resolve()
+    target = (destination / member.name).resolve()
+    try:
+        target.relative_to(root)
+    except ValueError as error:
+        raise ProtonError(f"Unsafe path in GE-Proton archive: {member.name}") from error
+
+    if member.ischr() or member.isblk() or member.isfifo():
+        raise ProtonError(f"Unsupported special file in GE-Proton archive: {member.name}")
+    if member.issym() or member.islnk():
+        link_target = Path(member.linkname)
+        if link_target.is_absolute():
+            resolved_link = link_target.resolve()
+        elif member.islnk():
+            resolved_link = (root / link_target).resolve()
+        else:
+            resolved_link = (target.parent / link_target).resolve()
+        try:
+            resolved_link.relative_to(root)
+        except ValueError as error:
+            raise ProtonError(f"Unsafe link in GE-Proton archive: {member.name}") from error
+
+
+def _extract_ge_proton(archive: Path, destination: Path) -> Path:
+    try:
+        with tarfile.open(archive, mode="r:gz") as bundle:
+            members = bundle.getmembers()
+            for member in members:
+                _validate_tar_member(member, destination)
+            bundle.extractall(destination, members=members)
+    except ProtonError:
+        raise
+    except (OSError, tarfile.TarError) as error:
+        raise ProtonError(f"Could not extract GE-Proton: {error}") from error
+
+    roots = [path for path in destination.iterdir() if path.is_dir()]
+    if len(roots) != 1 or not (roots[0] / "proton").is_file():
+        raise ProtonError("GE-Proton archive did not contain one runnable Proton installation.")
+    return roots[0]
+
+
+def install_managed_proton(destination_root: Path | None = None) -> ProtonInstallation:
+    """Install the latest official GE-Proton release into RunEXE's user data directory."""
+
+    root = (destination_root or managed_proton_root()).expanduser().resolve()
+    tag, asset_url = _latest_ge_proton_asset()
+    root.mkdir(parents=True, exist_ok=True)
+
+    existing = root / tag
+    if existing.is_dir():
+        installation = _from_script(existing / "proton", root)
+        if installation:
+            return installation
+
+    with tempfile.TemporaryDirectory(prefix=".runexe-proton-", dir=root) as temporary:
+        staging = Path(temporary)
+        archive = staging / "ge-proton.tar.gz"
+        extracted = staging / "extracted"
+        extracted.mkdir()
+        _download_file(asset_url, archive)
+        install_dir = _extract_ge_proton(archive, extracted)
+        final = root / tag
+        if final.exists():
+            installation = _from_script(final / "proton", root)
+            if installation:
+                return installation
+            raise ProtonError(f"Managed Proton destination already exists but is invalid: {final}")
+        try:
+            install_dir.replace(final)
+        except OSError as error:
+            raise ProtonError(f"Could not finalize managed Proton installation: {error}") from error
+
+    installation = _from_script(final / "proton", root)
+    if installation is None:
+        shutil.rmtree(final, ignore_errors=True)
+        raise ProtonError("The installed GE-Proton runtime is not runnable.")
+    return installation
+
+
 def select_proton(
     selector: str | Path | None = None,
     installations: list[ProtonInstallation] | None = None,
@@ -224,8 +392,9 @@ def select_proton(
     if selector is None:
         if not available:
             raise ProtonError(
-                "No Proton installation found. Install Proton in Steam, place a custom build "
-                "in compatibilitytools.d, or set RUNEXE_PROTON_PATH."
+                "No Proton installation found. Install a managed build with RunEXE, install "
+                "Proton in Steam, place a custom build in compatibilitytools.d, or set "
+                "RUNEXE_PROTON_PATH."
             )
         return available[0]
 

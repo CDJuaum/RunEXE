@@ -1,4 +1,4 @@
-"""Portable Linux host discovery and package-manager guidance.
+"""Portable Linux host discovery and package-manager setup.
 
 This module deliberately contains no Qt or Wine imports.  It is shared by the
 CLI, GUI bootstrap, and runtime layer so every entry point resolves tools in
@@ -291,6 +291,22 @@ _FAMILY_MANAGER = {
 }
 
 
+class SystemInstallError(RuntimeError):
+    """Raised when RunEXE cannot install a requested host component."""
+
+
+_INSTALL_ARGUMENTS: dict[str, tuple[str, ...]] = {
+    "apt": ("install", "-y"),
+    "dnf": ("install", "-y"),
+    "pacman": ("-S", "--noconfirm", "--needed"),
+    "zypper": ("--non-interactive", "install"),
+    "apk": ("add",),
+    "xbps-install": ("-Sy",),
+    "emerge": ("--noreplace",),
+    "eopkg": ("install", "-y"),
+}
+
+
 def detect_package_manager(distribution: LinuxDistribution | None = None) -> str | None:
     """Prefer an installed manager, then use os-release as a fallback."""
 
@@ -333,6 +349,74 @@ def install_hint(component: str, distribution: LinuxDistribution | None = None) 
         "eopkg": "sudo eopkg install",
     }[manager]
     return f"{prefix} {' '.join(packages)}"
+
+
+def _privilege_prefix() -> tuple[str, ...]:
+    """Return an argv prefix for an administrator package-manager invocation."""
+
+    geteuid = getattr(os, "geteuid", None)
+    if geteuid is not None and geteuid() == 0:
+        return ()
+    for helper in ("pkexec", "sudo"):
+        if executable := shutil.which(helper):
+            return (executable,)
+    raise SystemInstallError("Installing system packages requires pkexec or sudo.")
+
+
+def package_install_command(
+    component: str,
+    distribution: LinuxDistribution | None = None,
+) -> list[str]:
+    """Build a safe argv command to install a supported host component."""
+
+    distribution = distribution or detect_linux_distribution()
+    if distribution.family == "nixos":
+        raise SystemInstallError(
+            "Automatic system package installation is not supported on NixOS; "
+            f"use `{install_hint(component, distribution)}` instead."
+        )
+
+    manager = detect_package_manager(distribution)
+    if manager is None or manager not in _PACKAGES or manager not in _INSTALL_ARGUMENTS:
+        raise SystemInstallError(
+            f"Automatic package installation is not supported on {distribution.pretty_name}."
+        )
+    executable = shutil.which(manager)
+    if executable is None:
+        raise SystemInstallError(f"Package manager '{manager}' is not available on PATH.")
+    packages = _PACKAGES[manager].get(component)
+    if packages is None:
+        raise SystemInstallError(
+            f"RunEXE does not know which {manager} packages provide '{component}'."
+        )
+    return [*_privilege_prefix(), executable, *_INSTALL_ARGUMENTS[manager], *packages]
+
+
+def install_system_component(
+    component: str,
+    distribution: LinuxDistribution | None = None,
+    *,
+    timeout: int = 900,
+) -> subprocess.CompletedProcess[str]:
+    """Install a known host component with the distribution package manager."""
+
+    command = package_install_command(component, distribution)
+    try:
+        return subprocess.run(
+            command,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+    except subprocess.CalledProcessError as error:
+        detail = (error.stderr or error.stdout or "").strip()
+        suffix = f": {detail}" if detail else ""
+        raise SystemInstallError(f"System package installation failed{suffix}") from error
+    except subprocess.TimeoutExpired as error:
+        raise SystemInstallError("System package installation timed out.") from error
+    except OSError as error:
+        raise SystemInstallError(f"Could not start system package installation: {error}") from error
 
 
 def detect_libc() -> tuple[str, str | None]:

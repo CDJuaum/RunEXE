@@ -1,3 +1,5 @@
+import io
+import tarfile
 from pathlib import Path
 
 import pytest
@@ -6,6 +8,7 @@ from runexe.proton import (
     ProtonError,
     ProtonInstallation,
     discover_proton_installations,
+    install_managed_proton,
     proton_environment,
     select_proton,
 )
@@ -46,6 +49,71 @@ def test_discovers_proton_in_an_additional_steam_library(tmp_path, monkeypatch):
 
     assert [item.script for item in installations] == [expected.script]
     assert installations[0].steam_root == root.resolve()
+
+
+def test_discovers_runexe_managed_proton(tmp_path, monkeypatch):
+    managed = tmp_path / "data" / "runexe" / "runtimes" / "proton"
+    install = managed / "GE-Proton10-20"
+    install.mkdir(parents=True)
+    script = install / "proton"
+    script.write_text("#!/bin/sh\n", encoding="utf-8")
+    script.chmod(0o755)
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+    monkeypatch.setattr("runexe.proton._common_steam_roots", lambda: [])
+
+    installations = discover_proton_installations()
+
+    assert [item.name for item in installations] == ["GE-Proton10-20"]
+    assert installations[0].steam_root == managed.resolve()
+
+
+def test_installs_managed_ge_proton_from_mocked_release(tmp_path, monkeypatch):
+    archive = tmp_path / "source.tar.gz"
+    with tarfile.open(archive, "w:gz") as bundle:
+        data = b"#!/bin/sh\n"
+        info = tarfile.TarInfo("GE-Proton10-20/proton")
+        info.mode = 0o755
+        info.size = len(data)
+        bundle.addfile(info, io.BytesIO(data))
+
+    monkeypatch.setattr(
+        "runexe.proton._latest_ge_proton_asset",
+        lambda: ("GE-Proton10-20", "https://example.invalid/ge.tar.gz"),
+    )
+
+    def download(_url, destination, **_kwargs):
+        destination.write_bytes(archive.read_bytes())
+
+    monkeypatch.setattr("runexe.proton._download_file", download)
+
+    installation = install_managed_proton(tmp_path / "managed")
+
+    assert installation.name == "GE-Proton10-20"
+    assert installation.script == (tmp_path / "managed" / "GE-Proton10-20" / "proton").resolve()
+    assert installation.script.read_bytes() == b"#!/bin/sh\n"
+
+
+def test_managed_proton_rejects_archive_path_traversal(tmp_path, monkeypatch):
+    archive = tmp_path / "unsafe.tar.gz"
+    with tarfile.open(archive, "w:gz") as bundle:
+        data = b"bad"
+        info = tarfile.TarInfo("../outside")
+        info.size = len(data)
+        bundle.addfile(info, io.BytesIO(data))
+
+    monkeypatch.setattr(
+        "runexe.proton._latest_ge_proton_asset",
+        lambda: ("GE-Proton10-20", "https://example.invalid/ge.tar.gz"),
+    )
+    monkeypatch.setattr(
+        "runexe.proton._download_file",
+        lambda _url, destination, **_kwargs: destination.write_bytes(archive.read_bytes()),
+    )
+
+    with pytest.raises(ProtonError, match="Unsafe path"):
+        install_managed_proton(tmp_path / "managed")
+
+    assert not (tmp_path / "outside").exists()
 
 
 def test_selects_by_name_and_rejects_ambiguous_query(tmp_path):

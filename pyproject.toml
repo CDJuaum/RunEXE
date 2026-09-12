@@ -1,6 +1,6 @@
 [project]
 name = "runexe"
-version = "0.6.0"
+version = "0.7.0"
 description = "Analyze and run Windows software on Linux with a desktop GUI or CLI"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -46,7 +46,7 @@ runexe = "runexe.cli:main"
 runexe-gui = "runexe.gui:main"
 
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77.0.3"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]

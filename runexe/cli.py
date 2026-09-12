@@ -31,9 +31,14 @@ from runexe.diagnostics import collect_diagnostics
 from runexe.environments import discover_environments, format_size, remove_managed_environment
 from runexe.host import detect_host
 from runexe.library import ApplicationLibrary, LaunchPreset
-from runexe.platform_support import install_hint
+from runexe.platform_support import SystemInstallError, install_hint, install_system_component
 from runexe.profiles import detect_runtime_issue
-from runexe.proton import ProtonError, discover_proton_installations, select_proton
+from runexe.proton import (
+    ProtonError,
+    discover_proton_installations,
+    install_managed_proton,
+    select_proton,
+)
 from runexe.resources import extract_requested_execution_level
 from runexe.runner import LaunchResult, RunnerError, launch
 from runexe.ui import (
@@ -77,7 +82,12 @@ desktop_app = typer.Typer(
     help="Install or remove the per-user Linux desktop-menu entry.",
     no_args_is_help=True,
 )
+proton_app = typer.Typer(
+    help="Manage RunEXE's user-level Proton runtime.",
+    no_args_is_help=True,
+)
 app.add_typer(desktop_app, name="desktop")
+app.add_typer(proton_app, name="proton")
 
 
 def _analysis_as_dict(result, compatibility, host) -> dict:
@@ -877,9 +887,21 @@ def graphics_readiness(
     json_output: Annotated[
         bool, typer.Option("--json", help="Emit Vulkan/GPU and DXVK readiness as JSON.")
     ] = False,
+    install_tools: Annotated[
+        bool,
+        typer.Option(
+            "--install-tools",
+            help="Install the distribution's Vulkan diagnostic tools using its package manager.",
+        ),
+    ] = False,
 ) -> None:
-    """Inspect Vulkan/GPU readiness and DXVK in managed environments."""
+    """Inspect Vulkan/GPU readiness and optionally install Vulkan diagnostic tools."""
 
+    if install_tools:
+        try:
+            install_system_component("vulkan")
+        except SystemInstallError as error:
+            _fail(str(error))
     host = detect_host()
     environments = discover_environments()
     payload = {
@@ -900,6 +922,8 @@ def graphics_readiness(
     if json_output:
         typer.echo(json.dumps(payload, indent=2))
         return
+    if install_tools:
+        print_success("Vulkan diagnostic tools installed through the system package manager.")
     print_banner("Graphics readiness | read-only Vulkan and DXVK inspection")
     print_summary(
         "Vulkan",
@@ -937,6 +961,25 @@ def graphics_readiness(
                 for item in environments
             ),
         )
+
+
+@proton_app.command("install")
+def proton_install() -> None:
+    """Install the latest official GE-Proton release for the current user."""
+
+    try:
+        installation = install_managed_proton()
+    except ProtonError as error:
+        _fail(str(error))
+    print_success(f"Managed Proton ready: {installation.name}")
+    print_summary(
+        "User-level Proton runtime",
+        [
+            ("Version", installation.version or "not reported"),
+            ("Launcher", installation.script),
+        ],
+    )
+    print_hint("RunEXE will discover this runtime automatically for future launches.")
 
 
 @desktop_app.command("install")
@@ -1004,8 +1047,8 @@ def list_backends() -> None:
         print_hint("Choose one with --proton NAME or --proton /path/to/proton.")
     else:
         print_hint(
-            "Install Proton through Steam, add a custom build to compatibilitytools.d, "
-            "or set RUNEXE_PROTON_PATH."
+            "Run 'runexe proton install', install Proton through Steam, add a custom build to "
+            "compatibilitytools.d, or set RUNEXE_PROTON_PATH."
         )
     if not host.vulkan_supported:
         print_hint(

@@ -1,26 +1,29 @@
 # Desktop interface
 
-RunEXE follows the [KDE Human Interface Guidelines](https://develop.kde.org/hig/)
-for its Qt desktop interface. The goal is a familiar Linux utility: clear actions,
-compact layouts, and the user's desktop colors and fonts.
+RunEXE uses a lightweight Qt shell designed to feel at home on a Linux desktop while
+providing clearer hierarchy than a traditional tool window. It keeps the user's desktop
+palette and fonts, uses themed icons with Qt fallbacks, and adds only small structural
+styles and animations on top of native Qt widgets.
 
 ## Design rules
 
-- Use a tab bar for the four main destinations. Keep Open, Analyze, and Launch
-  in the shared toolbar so the current file remains actionable from every page.
+- Use a sidebar for the four main destinations. It collapses to an icon rail at narrower
+  widths while preserving accessible labels and tooltips. Keep Open, Analyze, and Launch
+  in the shared page header so the current file remains actionable from every page.
   See [layout and navigation](https://develop.kde.org/hig/layout_and_nav/).
 - Prefer standard Qt controls and themed icons with Qt fallbacks. Keep custom
-  styling limited to spacing, grouping, and semantic status colors. Avoid large
-  banners, decorative dashboard cards, and custom control artwork.
+  styling focused on spacing, rounded surfaces, hierarchy, and semantic status colors.
+  Derive shell colors from the active light/dark palette rather than replacing it.
 - Show the file picker first. Reveal file-specific results and arguments after a
   file is selected. Place details and compatibility side by side when space allows.
   See [simple by default](https://develop.kde.org/hig/simple_by_default/).
 - Use short, descriptive labels and reserve the accent color for the main action
-  and current tab. Pair status colors with text; preserve keyboard focus and native
+  and current navigation marker. Pair status colors with text; preserve keyboard focus and native
   menus. See [text and labels](https://develop.kde.org/hig/text_and_labels/) and
   [accessibility](https://develop.kde.org/hig/accessibility/).
-- Switch pages and update results immediately. Apply touchpad pixel deltas directly;
-  only mouse-wheel scrolling uses a short, interruptible animation.
+- Switch pages immediately and use one short reusable position animation to soften page
+  changes without fades or graphics effects. Apply touchpad pixel deltas directly; only
+  mouse-wheel scrolling uses a short, interruptible animation.
 
 ## Keyboard access
 

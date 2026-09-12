@@ -50,8 +50,6 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QProgressBar,
     QPushButton,
-    QStackedWidget,
-    QTabBar,
     QVBoxLayout,
     QWidget,
 )
@@ -80,11 +78,13 @@ from runexe.environments import (
 from runexe.host import detect_host
 from runexe.library import ApplicationLibrary, ApplicationRecord, LaunchPreset
 from runexe.models import CompatibilityReport, ExecutableInfo, HostInfo
+from runexe.platform_support import install_system_component
 from runexe.profiles import detect_runtime_issue
 from runexe.proton import (
     PROTON_TUNING_PRESETS,
     ProtonInstallation,
     discover_proton_installations,
+    install_managed_proton,
 )
 from runexe.runner import (
     PreparedEnvironment,
@@ -95,10 +95,12 @@ from runexe.runner import (
 
 from .theme import apply_theme
 from .widgets import (
+    AnimatedStackedWidget,
     Card,
     DropZone,
     MetricCard,
     MetricGrid,
+    NavigationRail,
     SmoothScrollArea,
     StatusPill,
     navigation_icon,
@@ -223,22 +225,68 @@ class RunEXEWindow(QMainWindow):
 
     def _build_workspace(self) -> QWidget:
         workspace = QWidget()
-        layout = QVBoxLayout(workspace)
+        layout = QHBoxLayout(workspace)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
+
+        self.sidebar = QFrame()
+        self.sidebar.setObjectName("sidebar")
+        self.sidebar.setMinimumWidth(76)
+        self.sidebar.setMaximumWidth(220)
+        sidebar_layout = QVBoxLayout(self.sidebar)
+        sidebar_layout.setContentsMargins(12, 14, 12, 12)
+        sidebar_layout.setSpacing(12)
+        brand_row = QHBoxLayout()
+        brand_row.setContentsMargins(4, 0, 4, 2)
+        logo = QLabel()
+        logo.setFixedSize(28, 28)
+        logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        if _asset_path().is_file():
+            logo.setPixmap(QIcon(str(_asset_path())).pixmap(24, 24))
+        brand_row.addWidget(logo)
+        self.brand_label = QLabel("RunEXE")
+        self.brand_label.setObjectName("brandTitle")
+        brand_font = self.brand_label.font()
+        brand_font.setPointSizeF(brand_font.pointSizeF() + 2)
+        self.brand_label.setFont(brand_font)
+        brand_row.addWidget(self.brand_label)
+        brand_row.addStretch(1)
+        sidebar_layout.addLayout(brand_row)
+
+        self.navigation = NavigationRail()
+        for index, (title, description) in enumerate(self.PAGE_TITLES):
+            self.navigation.addTab(navigation_icon(index), title)
+            self.navigation.setTabToolTip(index, description)
+        self.navigation.currentChanged.connect(self._show_page)
+        sidebar_layout.addWidget(self.navigation)
+        sidebar_layout.addStretch(1)
+        version_label = _muted(f"v{__version__}")
+        version_label.setObjectName("versionLabel")
+        sidebar_layout.addWidget(version_label)
+        layout.addWidget(self.sidebar)
+
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
 
         header = QFrame()
         header.setObjectName("header")
         header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(20, 12, 20, 12)
-        header_layout.setSpacing(8)
-        brand = QLabel("RunEXE")
-        brand.setObjectName("brandTitle")
-        brand_font = brand.font()
-        brand_font.setPointSizeF(brand_font.pointSizeF() + 3)
-        brand.setFont(brand_font)
-        header_layout.addWidget(brand)
-        header_layout.addSpacing(16)
+        header_layout.setContentsMargins(24, 14, 24, 14)
+        header_layout.setSpacing(10)
+        title_group = QVBoxLayout()
+        title_group.setSpacing(1)
+        self.page_title = QLabel(self.PAGE_TITLES[0][0])
+        self.page_title.setObjectName("sectionTitle")
+        page_title_font = self.page_title.font()
+        page_title_font.setPointSizeF(page_title_font.pointSizeF() + 3)
+        self.page_title.setFont(page_title_font)
+        self.page_description = _muted(self.PAGE_TITLES[0][1])
+        self.page_description.setWordWrap(False)
+        title_group.addWidget(self.page_title)
+        title_group.addWidget(self.page_description)
+        header_layout.addLayout(title_group, 1)
         self.browse_button = _button("Open…")
         self.browse_button.setToolTip("Open Windows software (Ctrl+O)")
         self.browse_button.clicked.connect(self.browse_file)
@@ -247,38 +295,26 @@ class RunEXEWindow(QMainWindow):
         self.analyze_button.clicked.connect(self.analyze_selected)
         header_layout.addWidget(self.browse_button)
         header_layout.addWidget(self.analyze_button)
-        header_layout.addStretch(1)
         self.header_status = StatusPill("Checking runtimes")
         header_layout.addWidget(self.header_status)
-        header_layout.addSpacing(12)
         self.launch_button = _button("Launch", primary=True)
         self.launch_button.setToolTip("Prepare the environment and launch (Ctrl+Enter)")
         self.launch_button.clicked.connect(self.launch_application)
         header_layout.addWidget(self.launch_button)
-        layout.addWidget(header)
-
-        self.navigation = QTabBar()
-        self.navigation.setAccessibleName("Main navigation")
-        self.navigation.setExpanding(False)
-        self.navigation.setDrawBase(False)
-        for index, (title, description) in enumerate(self.PAGE_TITLES):
-            self.navigation.addTab(navigation_icon(index), title)
-            self.navigation.setTabToolTip(index, description)
-        self.navigation.currentChanged.connect(self._show_page)
-        layout.addWidget(self.navigation)
+        content_layout.addWidget(header)
 
         self.progress = QProgressBar()
         self.progress.setRange(0, 0)
         self.progress.hide()
-        layout.addWidget(self.progress)
+        content_layout.addWidget(self.progress)
 
-        self.pages = QStackedWidget()
+        self.pages = AnimatedStackedWidget()
         self.pages.setAutoFillBackground(True)
         self.pages.addWidget(self._build_overview_page())
         self.pages.addWidget(self._build_runtime_page())
         self.pages.addWidget(self._build_library_page())
         self.pages.addWidget(self._build_activity_page())
-        layout.addWidget(self.pages, 1)
+        content_layout.addWidget(self.pages, 1)
 
         status = QFrame()
         status.setObjectName("statusBar")
@@ -289,7 +325,8 @@ class RunEXEWindow(QMainWindow):
         self.environment_status.setAlignment(Qt.AlignmentFlag.AlignRight)
         status_layout.addWidget(self.task_status, 1)
         status_layout.addWidget(self.environment_status, 1)
-        layout.addWidget(status)
+        content_layout.addWidget(status)
+        layout.addWidget(content, 1)
         return workspace
 
     def _scroll_page(self) -> tuple[SmoothScrollArea, QWidget, QVBoxLayout]:
@@ -520,6 +557,12 @@ class RunEXEWindow(QMainWindow):
         action_grid.setVerticalSpacing(10)
         self.prepare_button = _button("Prepare automatically", primary=True)
         self.prepare_button.clicked.connect(self.prepare_selected_environment)
+        self.install_proton_button = _button("Install Proton")
+        self.install_proton_button.setToolTip("Install or update RunEXE's managed Proton runtime")
+        self.install_proton_button.clicked.connect(self.install_proton)
+        self.install_vulkan_button = _button("Install Vulkan tools")
+        self.install_vulkan_button.setToolTip("Install the Vulkan utilities used for GPU checks")
+        self.install_vulkan_button.clicked.connect(self.install_vulkan_tools)
         self.wine_config_button = _button("Open Wine settings")
         self.wine_config_button.clicked.connect(lambda: self.open_runtime_settings("wine"))
         self.proton_config_button = _button("Open Proton settings")
@@ -528,8 +571,10 @@ class RunEXEWindow(QMainWindow):
         self.refresh_button.clicked.connect(self.refresh_runtimes)
         action_grid.addWidget(self.prepare_button, 0, 0)
         action_grid.addWidget(self.refresh_button, 0, 1)
-        action_grid.addWidget(self.wine_config_button, 1, 0)
-        action_grid.addWidget(self.proton_config_button, 1, 1)
+        action_grid.addWidget(self.install_proton_button, 1, 0)
+        action_grid.addWidget(self.install_vulkan_button, 1, 1)
+        action_grid.addWidget(self.wine_config_button, 2, 0)
+        action_grid.addWidget(self.proton_config_button, 2, 1)
         action_grid.setColumnStretch(0, 1)
         action_grid.setColumnStretch(1, 1)
         actions_layout.addLayout(action_grid)
@@ -724,10 +769,21 @@ class RunEXEWindow(QMainWindow):
     def _show_page(self, index: int) -> None:
         if not 0 <= index < self.pages.count():
             return
-        self.pages.setCurrentIndex(index)
+        self.pages.show_page(index)
         with QSignalBlocker(self.navigation):
             self.navigation.setCurrentIndex(index)
-        self.setWindowTitle(f"{self.PAGE_TITLES[index][0]} — RunEXE")
+        title, description = self.PAGE_TITLES[index]
+        self.page_title.setText(title)
+        self.page_description.setText(description)
+        self.setWindowTitle(f"{title} — RunEXE")
+
+    def resizeEvent(self, event) -> None:  # noqa: N802 - Qt API
+        compact = event.size().width() < 1040
+        self.navigation.setCompact(compact)
+        self.sidebar.setFixedWidth(76 if compact else 204)
+        self.brand_label.setVisible(not compact)
+        self.page_description.setVisible(event.size().width() >= 980)
+        super().resizeEvent(event)
 
     def _restore_settings(self) -> None:
         geometry = self.settings.value("window/geometry")
@@ -802,6 +858,8 @@ class RunEXEWindow(QMainWindow):
         self.launch_button.setEnabled(bool(ready) and not blocking_busy and not running)
         self.prepare_button.setEnabled(bool(ready) and not blocking_busy and not running)
         self.refresh_button.setEnabled(not blocking_busy and not running)
+        self.install_proton_button.setEnabled(not blocking_busy and not running)
+        self.install_vulkan_button.setEnabled(not blocking_busy and not running)
         self.wine_config_button.setEnabled(
             analyzed
             and bool(self.host and self.host.wine_installed)
@@ -847,7 +905,7 @@ class RunEXEWindow(QMainWindow):
         proton_detail = (
             f"{len(self.proton_installations)} build(s) discovered"
             if self.proton_installations
-            else "Install through Steam or add a custom build"
+            else "Install with RunEXE, Steam, or add a custom build"
         )
         self.proton_metric.set_data(
             "Available" if self.proton_installations else "Not found",
@@ -1592,6 +1650,38 @@ class RunEXEWindow(QMainWindow):
         self._start_task(
             "runtimes", "Refreshing Wine and Proton detection", detect, self._runtimes_ready
         )
+
+    def install_proton(self) -> None:
+        """Install the latest RunEXE-managed GE-Proton build in the background."""
+
+        self._start_task(
+            "install-proton",
+            "Installing the latest GE-Proton runtime",
+            install_managed_proton,
+            self._managed_proton_installed,
+        )
+
+    def _managed_proton_installed(self, installation: ProtonInstallation) -> None:
+        self._log(f"Managed Proton ready: {installation.name} at {installation.install_dir}")
+        self.task_status.setText(f"Installed {installation.name}")
+        self._set_header_status("Proton installed", "ready")
+        self.refresh_runtimes()
+
+    def install_vulkan_tools(self) -> None:
+        """Install this distribution's Vulkan diagnostic package in the background."""
+
+        self._start_task(
+            "install-vulkan",
+            "Installing Vulkan tools",
+            lambda: install_system_component("vulkan"),
+            self._vulkan_tools_installed,
+        )
+
+    def _vulkan_tools_installed(self, _result: object) -> None:
+        self._log("Vulkan tools installation completed.")
+        self.task_status.setText("Vulkan tools installed")
+        self._set_header_status("Vulkan tools installed", "ready")
+        self.refresh_runtimes()
 
     def _runtimes_ready(self, result: tuple[HostInfo, list[ProtonInstallation]]) -> None:
         self.host, self.proton_installations = result

@@ -6,9 +6,12 @@ import pytest
 from runexe.gui.bootstrap import choose_qt_platform
 from runexe.platform_support import (
     LinuxDistribution,
+    SystemInstallError,
     detect_linux_distribution,
     find_executable,
     install_hint,
+    install_system_component,
+    package_install_command,
 )
 
 
@@ -54,6 +57,57 @@ def test_vulkan_hint_is_distribution_specific(monkeypatch):
     )
 
     assert install_hint("vulkan", LinuxDistribution("kali")) == "sudo apt install vulkan-tools"
+
+
+def test_vulkan_install_command_uses_safe_argv_and_pkexec(monkeypatch):
+    paths = {"apt": "/usr/bin/apt", "pkexec": "/usr/bin/pkexec"}
+    monkeypatch.setattr("runexe.platform_support.shutil.which", paths.get)
+    monkeypatch.setattr("runexe.platform_support._privilege_prefix", lambda: ("/usr/bin/pkexec",))
+
+    command = package_install_command("vulkan", LinuxDistribution("ubuntu"))
+
+    assert command == ["/usr/bin/pkexec", "/usr/bin/apt", "install", "-y", "vulkan-tools"]
+
+
+def test_install_system_component_executes_without_shell(monkeypatch):
+    calls = []
+    paths = {"pacman": "/usr/bin/pacman", "sudo": "/usr/bin/sudo"}
+    monkeypatch.setattr("runexe.platform_support.shutil.which", paths.get)
+    monkeypatch.setattr("runexe.platform_support._privilege_prefix", lambda: ("/usr/bin/sudo",))
+
+    def run(argv, **kwargs):
+        calls.append((argv, kwargs))
+        return object()
+
+    monkeypatch.setattr("runexe.platform_support.subprocess.run", run)
+
+    install_system_component("vulkan", LinuxDistribution("arch"))
+
+    assert calls[0][0] == [
+        "/usr/bin/sudo",
+        "/usr/bin/pacman",
+        "-S",
+        "--noconfirm",
+        "--needed",
+        "vulkan-tools",
+    ]
+    assert calls[0][1]["check"] is True
+    assert "shell" not in calls[0][1]
+
+
+def test_automatic_install_is_explicitly_unsupported_on_nixos():
+    distribution = LinuxDistribution("nixos", pretty_name="NixOS")
+
+    with pytest.raises(SystemInstallError, match="not supported on NixOS"):
+        package_install_command("vulkan", distribution)
+
+
+def test_automatic_install_is_explicitly_unsupported_on_unknown_distribution(monkeypatch):
+    monkeypatch.setattr("runexe.platform_support.shutil.which", lambda _name: None)
+    distribution = LinuxDistribution("unknown", pretty_name="Mystery Linux")
+
+    with pytest.raises(SystemInstallError, match="not supported on Mystery Linux"):
+        package_install_command("vulkan", distribution)
 
 
 def test_wine64_is_a_valid_loader_fallback(monkeypatch):

@@ -1,0 +1,184 @@
+name: Linux release binaries
+
+on:
+  create:
+  push:
+    tags: ['**']
+  pull_request:
+    paths:
+      - '.github/workflows/release-linux.yml'
+      - 'scripts/build_linux.sh'
+      - 'scripts/frozen_entry.py'
+      - 'scripts/package_linux.py'
+      - 'tests/test_release.py'
+      - 'pyproject.toml'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to build and publish
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# Serialize reruns and tag updates; never cancel a release upload halfway through.
+concurrency:
+  group: linux-release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  source:
+    # New tags emit create AND push: create handles new tags, push handles updates.
+    if: >-
+      (github.event_name == 'create' && github.event.ref_type == 'tag') ||
+      (github.event_name == 'push' && !github.event.created && !github.event.deleted) ||
+      github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 5
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
+      tag: ${{ steps.source.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.sha || format('refs/tags/{0}', inputs.tag || github.ref_name) }}
+          persist-credentials: false
+      - name: Resolve immutable build source
+        id: source
+        env:
+          TAG: ${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || inputs.tag || github.ref_name }}
+        run: |
+          git check-ref-format "refs/tags/$TAG"
+          printf 'sha=%s\n' "$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          printf 'tag=%s\n' "$TAG" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: source
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - libc: glibc
+            image: ubuntu:22.04
+          - libc: musl
+            image: python:3.11-alpine3.22
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.source.outputs.sha }}
+          persist-credentials: false
+      - name: Build and test frozen executables
+        env:
+          IMAGE: ${{ matrix.image }}
+          LIBC: ${{ matrix.libc }}
+          RELEASE_TAG: ${{ needs.source.outputs.tag }}
+          RELEASE_SHA: ${{ needs.source.outputs.sha }}
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src \
+            -e RELEASE_TAG -e RELEASE_SHA "$IMAGE" sh scripts/build_linux.sh "$LIBC"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.libc }}
+          path: dist/linux/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  smoke:
+    needs: build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: debian:bookworm-slim
+            libc: glibc
+            format: deb
+          - image: ubuntu:22.04
+            libc: glibc
+            format: deb
+          - image: fedora:43
+            libc: glibc
+            format: rpm
+          - image: alpine:3.22
+            libc: musl
+            format: tar
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-${{ matrix.libc }}
+          path: artifacts
+      - name: Install and launch in a clean distribution
+        env:
+          IMAGE: ${{ matrix.image }}
+          FORMAT: ${{ matrix.format }}
+        run: |
+          docker run --rm -v "$PWD/artifacts:/artifacts:ro" -e FORMAT "$IMAGE" sh -ec '
+            case "$FORMAT" in
+              deb)
+                apt-get update -qq
+                apt-get install -y --no-install-recommends /artifacts/*.deb
+                ;;
+              rpm) dnf install -y --setopt=install_weak_deps=False /artifacts/*.rpm ;;
+              tar)
+                tar -xzf /artifacts/*.tar.gz -C /tmp
+                /tmp/runexe/runexe version
+                /tmp/runexe/runexe --help
+                exit 0
+                ;;
+            esac
+            runexe version
+            runexe --help
+            status=0
+            QT_QPA_PLATFORM=offscreen timeout 8s runexe-gui > /tmp/gui.log 2>&1 || status=$?
+            cat /tmp/gui.log
+            test "$status" -eq 124
+          '
+
+  publish:
+    if: github.event_name != 'pull_request'
+    needs: [source, build, smoke]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ needs.source.outputs.tag }}
+          persist-credentials: false
+      - name: Confirm the tag still points to the tested commit
+        env:
+          BUILD_SHA: ${{ needs.source.outputs.sha }}
+        run: test "$(git rev-parse HEAD)" = "$BUILD_SHA"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: linux-*
+          merge-multiple: true
+          path: artifacts
+      - name: Publish binaries and checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.source.outputs.tag }}
+          BUILD_SHA: ${{ needs.source.outputs.sha }}
+        working-directory: artifacts
+        run: |
+          sha256sum ./*.tar.gz ./*.deb ./*.rpm > SHA256SUMS
+          # Leave releases in draft until every asset is present. Never overwrite
+          # a published release (including immutable releases) on a rerun.
+          if gh release view "$TAG" --json isDraft > release.json 2>/dev/null; then
+            test "$(jq -r .isDraft release.json)" = true || {
+              echo 'Release already published; artifacts remain available in this workflow run.'
+              exit 0
+            }
+          else
+            gh release create "$TAG" --verify-tag --draft --title "RunEXE $TAG" \
+              --notes "Linux x86-64 builds from $BUILD_SHA. Desktop glibc (2.35+) and Alpine 3.22+ CLI (musl). Python is bundled; Wine/Proton and system graphics drivers are installed separately."
+          fi
+          gh release upload "$TAG" ./*.tar.gz ./*.deb ./*.rpm SHA256SUMS --clobber
+          gh release edit "$TAG" --draft=false

@@ -2,6 +2,23 @@
 
 All notable RunEXE changes are documented here.
 
+## [0.7.0] - 2026-09-12
+
+### Added
+
+- RunEXE can install and manage a Proton build itself when no compatible Proton
+  runtime is already available.
+- The desktop runtime setup can install Vulkan diagnostic tooling through the
+  detected Linux distribution package manager and refresh readiness afterward.
+- Linux release automation can build tested glibc and musl archives plus native
+  DEB/RPM packages from tags and publish checksummed GitHub release assets.
+
+### Changed
+
+- The desktop interface uses a more modern responsive Qt shell with clearer
+  hierarchy and lightweight transitions while retaining keyboard access and
+  native Linux palette awareness.
+
 ## [0.6.0] - 2026-08-31
 
 ### Added

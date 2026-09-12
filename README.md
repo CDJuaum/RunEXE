@@ -96,6 +96,8 @@ More compatibility data is one of the long-term goals of the project (see [Roadm
 - **Environment manager** - inventories RunEXE-owned Wine/Proton environments, reports disk use, opens their folders, and removes only validated managed paths
 - **Support report export** - saves the current analysis, compatibility decision, host state, launch preset, environment inventory, and activity log as JSON
 - **Graphics readiness** - identifies DirectX translation paths, probes Vulkan GPUs, and detects DXVK in Wine prefixes and Proton runtimes
+- **Managed Proton setup** - installs the latest official GE-Proton release into RunEXE's per-user data directory without requiring root
+- **Distro-aware Vulkan tooling** - explicitly installs Vulkan diagnostic tools through the detected system package manager when requested
 - **Proton tuning presets** - applies temporary diagnostic, WineD3D, DXVK HUD, fsync, or ntsync overrides per application
 - **Prefix backup and restore** - creates compressed snapshots before removal and restores only into an absent managed location
 - **Expanded Wine configuration** - opens Wine settings, Registry Editor, Control Panel, installed-app management, or Explorer for an exact environment
@@ -109,10 +111,55 @@ More compatibility data is one of the long-term goals of the project (see [Roadm
   remains available on x86)
 - Python 3.10+
 - [Wine](https://www.winehq.org/), [Proton](https://github.com/ValveSoftware/Proton), or both (`analyze --no-host` needs neither)
+- A preinstalled Proton build is optional; RunEXE can install a managed GE-Proton
+  runtime from Runtime setup or with `runexe proton install`.
 - [Winetricks](https://github.com/Winetricks/winetricks) (optional, but needed for automatic dependency installation)
 - [PySide6 Essentials](https://doc.qt.io/qtforpython-6/) (installed automatically with the `gui` extra)
 
 ## 🔧 Installation
+
+### Linux release binaries
+
+The **Linux release binaries** GitHub Actions workflow builds every newly created
+tag and every pushed tag update. It publishes the following x86-64 downloads to
+the tag's GitHub release after tests and clean-distribution smoke checks pass:
+
+| Download | Intended systems | Includes |
+| --- | --- | --- |
+| `linux-x86_64-glibc.tar.gz` | glibc 2.35+ (Debian 12+, Ubuntu 22.04+, compatible distributions) | CLI, desktop GUI, Python, Qt |
+| `linux-x86_64-glibc.deb` | Debian / Ubuntu | Same bundle, menu entry, system dependency declarations |
+| `linux-x86_64-glibc.rpm` | Fedora / compatible RPM distributions with glibc 2.35+ | Same bundle and desktop integration |
+| `linux-x86_64-musl.tar.gz` | Alpine 3.22+ | CLI and Python; no Qt GUI |
+
+Filenames also include the tag and a short tag hash. Native package versions come
+from the project's numeric `major.minor.patch` version; update `pyproject.toml`
+and `runexe/__init__.py` before tagging a new version. Wine, Proton, graphics
+drivers, and the system display libraries are not bundled. Native packages
+declare their display dependencies; portable desktop archives need those
+libraries already installed. These downloads target x86-64, not ARM or 32-bit x86.
+
+Extract a portable archive and run `./runexe/runexe --help` or
+`./runexe/runexe-gui`. Keep the entire directory together. Install native packages
+with `sudo apt install ./runexe-*.deb` or `sudo dnf install ./runexe-*.rpm`.
+Verify downloads with `sha256sum -c SHA256SUMS` in a directory containing all
+release assets. Uninstalling a native package preserves per-user app state and
+Wine/Proton environments.
+
+The workflow must be present in the tagged commit. Push tags individually:
+GitHub suppresses tag events when more than three tags are pushed together.
+Tags created by another workflow's default `GITHUB_TOKEN` also do not trigger
+this workflow automatically. Use **Actions → Linux release binaries → Run
+workflow** with an existing tag to build it manually. Build artifacts remain
+available for 14 days even when the release is already published; reruns never
+replace a published release's assets. Draft releases can be retried safely.
+Pull requests that change release packaging also build and smoke-test all formats,
+uploading workflow artifacts without creating or changing a GitHub release.
+
+Build logic lives in `scripts/build_linux.sh` and `scripts/package_linux.py`.
+The desktop baseline is Ubuntu 22.04 (glibc 2.35); musl builds use Alpine 3.22.
+Builds use PyInstaller 6.22.2, run the test suite, launch the frozen CLI/GUI away
+from the source checkout, and test package installation in Debian 12, Ubuntu
+22.04, Fedora 43, and Alpine 3.22 before release publication.
 
 ### One-command user installation
 
@@ -185,10 +232,13 @@ musl distributions where an official PySide6 wheel is unavailable.
 
 ### Distribution portability
 
-RunEXE does not call `apt` internally or install system packages behind your
-back. It detects `apt`, `dnf`, `pacman`, `zypper`, `apk`, `xbps-install`,
-`emerge`, `eopkg`, and NixOS, then reports an appropriate command when a
-runtime or GUI library is missing. These are typical prerequisites:
+RunEXE detects `apt`, `dnf`, `pacman`, `zypper`, `apk`, `xbps-install`,
+`emerge`, `eopkg`, and NixOS. Normal analysis and launch flows do not install
+system packages. An explicit setup action such as `runexe graphics
+--install-tools` invokes the detected distribution package manager and may
+request administrator authentication through `pkexec` or `sudo`. Managed
+Proton installation is separate and stays entirely in the current user's data
+directory. These are typical prerequisites:
 
 | Distribution family | Runtime packages |
 | --- | --- |
@@ -290,7 +340,14 @@ Inspect what is installed and the order in which Proton builds will be selected:
 
 ```bash
 runexe backends
+runexe proton install
 ```
+
+`runexe proton install` downloads the latest official GE-Proton release into
+`$XDG_DATA_HOME/runexe/runtimes/proton` (normally
+`~/.local/share/runexe/runtimes/proton`). It is a user-level installation and
+does not use the distro package manager or require `sudo`; RunEXE discovers the
+managed build automatically alongside Steam and custom Proton installations.
 
 Run the complete, non-destructive host readiness check (or emit JSON for bug
 reports and automated setup):
@@ -301,7 +358,14 @@ runexe doctor --no-gui
 runexe doctor --json
 runexe graphics
 runexe graphics --json
+runexe graphics --install-tools
 ```
+
+`runexe graphics --install-tools` is an explicit system change: RunEXE asks the
+detected distro package manager to install its Vulkan diagnostic package (for
+example `vulkan-tools`) and uses the normal privilege prompt when one is
+required. After installation, the command immediately reruns the Vulkan/DXVK
+readiness report.
 
 List the local application library and RunEXE-owned environments:
 

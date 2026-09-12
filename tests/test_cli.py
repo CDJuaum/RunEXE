@@ -51,6 +51,32 @@ def test_desktop_remove_command_is_idempotent(tmp_path, monkeypatch):
     assert "No RunEXE-managed desktop entry" in result.output
 
 
+def test_proton_install_command_uses_managed_runtime(tmp_path, monkeypatch):
+    install_dir = tmp_path / "GE-Proton10-15"
+    installation = type(
+        "Installation",
+        (),
+        {
+            "name": "GE-Proton10-15",
+            "version": "GE-Proton10-15",
+            "script": install_dir / "proton",
+        },
+    )()
+    calls = []
+    monkeypatch.setattr(
+        "runexe.cli.install_managed_proton",
+        lambda: calls.append(True) or installation,
+    )
+
+    result = runner.invoke(app, ["proton", "install"])
+
+    assert result.exit_code == 0
+    assert calls == [True]
+    assert "Managed Proton ready: GE-Proton10-15" in result.output
+    assert "User-level Proton runtime" in result.output
+    assert "GE-Proton10-15" in result.output
+
+
 def test_json_analysis_is_machine_readable(tmp_path):
     path = make_pe(tmp_path / "sample.exe")
 
@@ -211,6 +237,33 @@ def test_environment_command_and_removal_confirmation(tmp_path, monkeypatch):
     assert removal.exit_code == 2
     assert "permanently removes" in removal.stdout
     assert "--yes" in removal.stdout
+
+
+def test_graphics_install_tools_uses_system_package_installer(monkeypatch):
+    calls = []
+    host = type(
+        "Host",
+        (),
+        {
+            "vulkan_available": True,
+            "vulkan_version": "1.3.280",
+            "vulkan_devices": ["Example GPU"],
+            "vulkan_error": None,
+        },
+    )()
+    monkeypatch.setattr(
+        "runexe.cli.install_system_component",
+        lambda component: calls.append(component),
+    )
+    monkeypatch.setattr("runexe.cli.detect_host", lambda: host)
+    monkeypatch.setattr("runexe.cli.discover_environments", lambda: [])
+
+    result = runner.invoke(app, ["graphics", "--install-tools"])
+
+    assert result.exit_code == 0
+    assert calls == ["vulkan"]
+    assert "installed through the system package manager" in result.output
+    assert "Example GPU" in result.output
 
 
 def test_rerun_restores_saved_cli_preset(tmp_path, monkeypatch):
