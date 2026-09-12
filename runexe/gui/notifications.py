@@ -22,7 +22,7 @@ class DesktopNotifier(QObject):
         self._window = window
         self._icon = icon if icon is not None and icon.is_file() else None
 
-    # Keep this a void Qt slot. PySide 6.10.x on Linux can segfault when a
+    # Keep this a void Qt slot. PySide 6.x on Linux can segfault when a
     # void Signal(str, str) invokes a Python slot declared with ``result=bool``.
     # Direct Python callers can still use the method's return value.
     @Slot(str, str)

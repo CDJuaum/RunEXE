@@ -7,7 +7,7 @@ All notable RunEXE changes are documented here.
 ### Fixed
 
 - Linux desktop completion notifications no longer declare a Qt return type on their
-  signal-connected Python slot. PySide6 6.10.3 could segfault when an application finished and
+  signal-connected Python slot. PySide6 on Linux could segfault when an application finished and
   RunEXE emitted the notification signal, which made closing apps such as Notepad++ also kill
   RunEXE.
 - Paint.NET 5.1 web installers are recognized as managed bootstrap packages and now declare their
