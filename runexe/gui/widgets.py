@@ -13,71 +13,53 @@ from PySide6.QtCore import (
     Signal,
 )
 from PySide6.QtGui import (
-    QColor,
     QDragEnterEvent,
     QDragLeaveEvent,
     QDropEvent,
     QIcon,
     QKeyEvent,
     QMouseEvent,
-    QPainter,
-    QPen,
-    QPixmap,
     QResizeEvent,
     QWheelEvent,
 )
 from PySide6.QtWidgets import (
+    QApplication,
     QFrame,
     QGridLayout,
+    QHBoxLayout,
     QLabel,
     QScrollArea,
     QScroller,
+    QStyle,
     QVBoxLayout,
     QWidget,
 )
 
-from .theme import COLORS
-
 
 def navigation_icon(kind: int) -> QIcon:
-    """Draw crisp, consistent navigation marks without platform icon dependencies."""
-    pixmap = QPixmap(40, 40)
-    pixmap.fill(Qt.GlobalColor.transparent)
-    painter = QPainter(pixmap)
-    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-    painter.setPen(QPen(QColor(COLORS["muted"]), 2.5))
-    if kind == 0:
-        for x, y in ((6, 6), (24, 6), (6, 24), (24, 24)):
-            painter.drawRoundedRect(x, y, 10, 10, 2, 2)
-    elif kind == 1:
-        for y, x in ((10, 14), (20, 27), (30, 18)):
-            painter.drawLine(5, y, 35, y)
-            painter.setBrush(QColor(COLORS["surface"]))
-            painter.drawEllipse(x - 3, y - 3, 6, 6)
-    elif kind == 2:
-        painter.drawRoundedRect(5, 8, 30, 27, 3, 3)
-        painter.drawLine(5, 16, 35, 16)
-        painter.drawLine(15, 23, 25, 23)
-    else:
-        painter.drawLine(6, 12, 14, 20)
-        painter.drawLine(14, 20, 6, 28)
-        painter.drawLine(21, 28, 34, 28)
-    painter.end()
-    pixmap.setDevicePixelRatio(2)
-    return QIcon(pixmap)
+    """Use desktop theme icons with portable Qt fallbacks."""
+    names = ("application-x-executable", "configure", "folder", "utilities-terminal")
+    fallbacks = (
+        QStyle.StandardPixmap.SP_DesktopIcon,
+        QStyle.StandardPixmap.SP_ComputerIcon,
+        QStyle.StandardPixmap.SP_DirIcon,
+        QStyle.StandardPixmap.SP_FileDialogDetailedView,
+    )
+    return QIcon.fromTheme(names[kind], QApplication.style().standardIcon(fallbacks[kind]))
 
 
 class MetricGrid(QWidget):
     """Keep summary cards in a single row when the workspace has room."""
 
-    def __init__(self, cards: list[QWidget]) -> None:
+    def __init__(self, cards: list[QWidget], *, narrow_columns: int = 2) -> None:
         super().__init__()
         self._cards = cards
+        self._narrow_columns = narrow_columns
         self._columns = 0
         self._grid = QGridLayout(self)
         self._grid.setContentsMargins(0, 0, 0, 0)
         self._grid.setSpacing(12)
-        self._reflow(2)
+        self._reflow(narrow_columns)
 
     def _reflow(self, columns: int) -> None:
         if columns == self._columns:
@@ -91,7 +73,7 @@ class MetricGrid(QWidget):
         self._columns = columns
 
     def resizeEvent(self, event: QResizeEvent) -> None:  # noqa: N802 - Qt API
-        self._reflow(len(self._cards) if event.size().width() >= 820 else 2)
+        self._reflow(len(self._cards) if event.size().width() >= 820 else self._narrow_columns)
         super().resizeEvent(event)
 
 
@@ -119,7 +101,13 @@ class SmoothScrollArea(QScrollArea):
         pixel_delta = event.pixelDelta().y()
         angle_delta = event.angleDelta().y()
         if pixel_delta:
-            distance = -pixel_delta
+            # Touchpads already deliver smooth pixels; do not add animation lag.
+            self._scroll_animation.stop()
+            bar = self.verticalScrollBar()
+            bar.setValue(bar.value() - pixel_delta)
+            self._scroll_target = bar.value()
+            event.accept()
+            return
         elif angle_delta:
             distance = int(-angle_delta / 120 * 108)
         else:
@@ -147,20 +135,17 @@ class MetricCard(QFrame):
     def __init__(self, caption: str, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setProperty("metric", True)
-        self._color_animation = QVariantAnimation(self)
-        self._color_animation.setDuration(180)
-        self._color_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setContentsMargins(12, 8, 12, 8)
         layout.setSpacing(5)
         self.caption = QLabel(caption)
         self.caption.setProperty("muted", True)
         self.value = QLabel("Not analyzed")
         self.value.setObjectName("metricValue")
         self.value.setWordWrap(True)
-        self._color_animation.valueChanged.connect(
-            lambda color: self.value.setStyleSheet(f"color: {color.name()};")
-        )
+        value_font = self.value.font()
+        value_font.setPointSizeF(value_font.pointSizeF() + 2)
+        self.value.setFont(value_font)
         self.detail = QLabel("Select Windows software to begin")
         self.detail.setProperty("muted", True)
         self.detail.setWordWrap(True)
@@ -177,19 +162,10 @@ class MetricCard(QFrame):
             return
         self.value.setText(value)
         self.detail.setText(detail)
-        self.value.setProperty("metricState", state)
-        self.value.style().unpolish(self.value)
-        self.value.style().polish(self.value)
-        colors = {
-            "success": QColor(COLORS["green"]),
-            "warning": QColor(COLORS["amber"]),
-            "error": QColor(COLORS["red"]),
-            "neutral": QColor(COLORS["text"]),
-        }
-        self._color_animation.stop()
-        self._color_animation.setStartValue(QColor(COLORS["muted"]))
-        self._color_animation.setEndValue(colors.get(state, colors["neutral"]))
-        self._color_animation.start()
+        if self.value.property("metricState") != state:
+            self.value.setProperty("metricState", state)
+            self.value.style().unpolish(self.value)
+            self.value.style().polish(self.value)
 
 
 class StatusPill(QLabel):
@@ -216,24 +192,30 @@ class DropZone(QFrame):
         self.setAcceptDrops(True)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setAccessibleName("Application file picker")
-        self.setMinimumHeight(124)
+        self.setMinimumHeight(88)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self._path: Path | None = None
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 22, 24, 22)
-        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.setSpacing(7)
-        self.title = QLabel("Drop an EXE, AppX, or MSIX here")
-        self.title.setObjectName("sectionTitle")
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(16)
+        icon = QLabel()
+        icon.setPixmap(navigation_icon(0).pixmap(40, 40))
+        layout.addWidget(icon)
+        text = QVBoxLayout()
+        text.setSpacing(4)
+        self.title = QLabel("Open a Windows application")
+        self.title.setObjectName("fileTitle")
+        title_font = self.title.font()
+        title_font.setPointSizeF(title_font.pointSizeF() + 3)
+        self.title.setFont(title_font)
         self.title.setWordWrap(True)
-        self.title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.subtitle = QLabel("or click to browse your files")
+        self.subtitle = QLabel("Drop an EXE, AppX, or MSIX here, or choose Open.")
         self.subtitle.setProperty("muted", True)
-        self.subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.subtitle.setWordWrap(False)
-        layout.addWidget(self.title)
-        layout.addWidget(self.subtitle)
+        text.addWidget(self.title)
+        text.addWidget(self.subtitle)
+        layout.addLayout(text, 1)
 
     @property
     def path(self) -> Path | None:
@@ -241,9 +223,6 @@ class DropZone(QFrame):
 
     def set_path(self, path: Path) -> None:
         self._path = path
-        self.setProperty("selected", True)
-        self.style().unpolish(self)
-        self.style().polish(self)
         self.title.setText(path.name)
         self.setToolTip(str(path))
         self._refresh_path_text(self.size())
@@ -251,7 +230,7 @@ class DropZone(QFrame):
     def _refresh_path_text(self, size: QSize) -> None:
         if self._path is None:
             return
-        available = max(120, size.width() - 80)
+        available = max(80, size.width() - 108)
         self.subtitle.setText(
             self.subtitle.fontMetrics().elidedText(
                 str(self._path), Qt.TextElideMode.ElideMiddle, available

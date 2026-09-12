@@ -29,7 +29,7 @@ def test_desktop_shell_has_expandable_pages(qt_app):
     window = RunEXEWindow(auto_refresh=False)
 
     assert window.pages.count() == 4
-    assert [button.text() for button in window.nav_buttons] == [
+    assert [window.navigation.tabText(index) for index in range(4)] == [
         "Overview",
         "Runtime setup",
         "Library",
@@ -37,6 +37,10 @@ def test_desktop_shell_has_expandable_pages(qt_app):
     ]
     assert window.minimumWidth() <= 920
     assert not window.launch_button.isEnabled()
+    assert window.overview_metrics.isHidden()
+    assert window.overview_details.isHidden()
+    assert window.arguments_card.isHidden()
+    assert not window.drop_zone.isHidden()
     assert [action.text() for action in window.environment_configure_menu.actions()] == [
         "Wine settings",
         "Registry editor",
@@ -47,18 +51,90 @@ def test_desktop_shell_has_expandable_pages(qt_app):
     window.deleteLater()
 
 
-def test_navigation_reuses_animation(qt_app):
+def test_navigation_updates_immediately_without_adding_animations(qt_app):
     from PySide6.QtCore import QVariantAnimation
 
     window = RunEXEWindow(auto_refresh=False)
     window._show_page(1)
-    animation = window._page_animation
     count = len(window.findChildren(QVariantAnimation))
     for index in range(100):
-        window._show_page(index % 4)
-    assert window._page_animation is animation
+        window.navigation.setCurrentIndex(index % 4)
+        assert window.pages.currentIndex() == index % 4
     assert len(window.findChildren(QVariantAnimation)) == count
+    assert not window.format_metric.findChildren(QVariantAnimation)
     window.deleteLater()
+
+
+def test_keyboard_navigation_wraps_between_pages(qt_app):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+
+    window = RunEXEWindow(auto_refresh=False)
+    window.show()
+    window.activateWindow()
+    qt_app.processEvents()
+    window.navigation.setFocus()
+    QTest.keyClick(window.navigation, Qt.Key.Key_Tab, Qt.KeyboardModifier.ControlModifier)
+    assert window.pages.currentIndex() == window.navigation.currentIndex() == 1
+    window._show_page(0)
+    QTest.keyClick(
+        window.navigation,
+        Qt.Key.Key_Tab,
+        Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier,
+    )
+    assert window.pages.currentIndex() == window.navigation.currentIndex() == 3
+    window.hide()
+    window.deleteLater()
+
+
+def test_theme_preserves_user_palette_and_font(qt_app):
+    from runexe.gui.theme import apply_theme
+
+    palette, font, stylesheet = qt_app.palette(), qt_app.font(), qt_app.styleSheet()
+    try:
+        apply_theme(qt_app)
+        assert qt_app.palette() == palette
+        assert qt_app.font() == font
+    finally:
+        qt_app.setStyleSheet(stylesheet)
+
+
+def test_touchpad_scroll_applies_pixels_without_waiting_for_animation(qt_app):
+    from PySide6.QtCore import QPoint, QPointF, Qt
+    from PySide6.QtGui import QWheelEvent
+    from PySide6.QtWidgets import QWidget
+
+    scroll = SmoothScrollArea()
+    content = QWidget()
+    content.setMinimumHeight(2000)
+    scroll.setWidget(content)
+    scroll.resize(400, 300)
+    scroll.show()
+    qt_app.processEvents()
+    bar = scroll.verticalScrollBar()
+    bar.setValue(200)
+
+    def wheel(pixels, angle):
+        event = QWheelEvent(
+            QPointF(50, 50),
+            QPointF(50, 50),
+            QPoint(0, pixels),
+            QPoint(0, angle),
+            Qt.MouseButton.NoButton,
+            Qt.KeyboardModifier.NoModifier,
+            Qt.ScrollPhase.ScrollUpdate,
+            False,
+        )
+        QApplication.sendEvent(scroll.viewport(), event)
+
+    wheel(0, -120)  # Begin a mouse-wheel animation, then interrupt it with touchpad input.
+    before = bar.value()
+    wheel(-24, -120)
+    assert bar.value() == before + 24
+    wheel(12, 120)
+    assert bar.value() == before + 12
+    scroll.close()
+    scroll.deleteLater()
 
 
 def test_runtime_refresh_uses_one_installation_snapshot(qt_app, monkeypatch):
@@ -100,6 +176,90 @@ def test_analysis_updates_readiness_and_runtime_state(qt_app, tmp_path):
     assert window.readiness_metric.value.text() == "Blocked"
     assert window.readiness_metric.value.property("metricState") == "error"
     assert not window.launch_button.isEnabled()
+    assert not window.overview_metrics.isHidden()
+    assert not window.overview_details.isHidden()
+    assert not window.arguments_card.isHidden()
+    window.deleteLater()
+
+
+def test_failed_new_analysis_cannot_launch_previous_app(qt_app, tmp_path, monkeypatch):
+    valid = make_pe(tmp_path / "valid.exe")
+    executable = analyze_executable(valid)
+    host = HostInfo("x86_64", True, "wine-11", True, True, True)
+    window = RunEXEWindow(
+        auto_refresh=False,
+        application_library=ApplicationLibrary(tmp_path / "library.json"),
+    )
+    window._analysis_ready(
+        AnalysisBundle(valid, executable, host, analyze_compatibility(executable, host), [])
+    )
+    assert window.launch_button.isEnabled()
+    invalid = tmp_path / "invalid.exe"
+    invalid.write_bytes(b"not an executable")
+    monkeypatch.setattr(window.thread_pool, "start", lambda worker: worker.run())
+    monkeypatch.setattr("runexe.gui.window.QMessageBox.critical", lambda *args: None)
+
+    window.analyze_path(invalid)
+
+    assert window.executable is None
+    assert window.compatibility is None
+    assert window.drop_zone.path == invalid.resolve()
+    assert not window.launch_button.isEnabled()
+    assert not window.prepare_button.isEnabled()
+    assert window.readiness_metric.value.text() == "Analysis failed"
+    assert str(valid) not in window.environment_preview.text()
+    window.deleteLater()
+
+
+def test_overlapping_analysis_does_not_change_selected_file(qt_app, tmp_path):
+    window = RunEXEWindow(auto_refresh=False)
+    original = tmp_path / "original.exe"
+    window.source_path = original
+    window.drop_zone.set_path(original)
+    window._workers["analysis"] = object()
+    window.analyze_path(tmp_path / "second.exe")
+    assert window.source_path == original
+    assert window.drop_zone.path == original
+    window._workers.clear()
+    window.deleteLater()
+
+
+def test_startup_runtime_detection_does_not_discard_initial_file(qt_app, tmp_path, monkeypatch):
+    window = RunEXEWindow(auto_refresh=False)
+    window._workers["runtimes"] = object()
+    tasks = []
+    monkeypatch.setattr(window, "_start_task", lambda key, *args: tasks.append(key))
+    source = tmp_path / "initial.exe"
+    window.analyze_path(source)
+    assert tasks == ["analysis"]
+    assert window.source_path == source.resolve()
+    window._workers.clear()
+    window.deleteLater()
+
+
+def test_library_search_and_refresh_preserve_selection(qt_app, tmp_path):
+    library = ApplicationLibrary(tmp_path / "library.json")
+    for name in ("Editor", "Calculator"):
+        library.remember_analysis(
+            tmp_path / f"{name}.exe", display_name=name, architecture="x86", file_format="PE32"
+        )
+    window = RunEXEWindow(auto_refresh=False, application_library=library)
+    bundle = LibraryBundle(library.records(), [])
+    window._library_ready(bundle)
+    window.library_search.setText("EDITOR")
+    matches = [
+        window.recent_list.item(i) for i in range(2) if not window.recent_list.item(i).isHidden()
+    ]
+    assert len(matches) == 1
+    window.recent_list.setCurrentItem(matches[0])
+    window._library_ready(bundle)
+    assert "Editor" in window.recent_list.currentItem().text()
+    assert window.recent_open_button.isEnabled()
+    window.library_search.setText("no match")
+    assert not window.recent_open_button.isEnabled()
+    assert window.library_empty.text() == "No applications match your search."
+    window.library_search.clear()
+    assert window.recent_open_button.isEnabled()
     window.deleteLater()
 
 

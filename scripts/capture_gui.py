@@ -13,12 +13,13 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-# Native Windows rendering is required for the bundled Segoe UI font.  Headless
-# Linux builders can still refresh the screenshot with Qt's offscreen backend.
+# Use the platform's font and controls. Headless Linux builders can refresh the
+# screenshot with Qt's offscreen backend.
 if sys.platform != "win32" and not os.environ.get("DISPLAY"):
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QEventLoop, QSettings, QTimer
+from PySide6.QtGui import QColor, QPalette
 from PySide6.QtWidgets import QApplication
 
 from runexe.gui.theme import apply_theme
@@ -30,6 +31,30 @@ from runexe.proton import ProtonInstallation
 
 def main() -> None:
     app = QApplication.instance() or QApplication([])
+    # Explicit schemes make visual QA repeatable without changing user settings.
+    scheme = os.environ.get("RUNEXE_SCREENSHOT_SCHEME", "system")
+    if scheme in {"light", "dark"}:
+        palette = QPalette()
+        dark = scheme == "dark"
+        for role, light, dark_color in (
+            (QPalette.ColorRole.Window, "#eff0f1", "#202225"),
+            (QPalette.ColorRole.Base, "#ffffff", "#292c30"),
+            (QPalette.ColorRole.AlternateBase, "#e7e9eb", "#33373c"),
+            (QPalette.ColorRole.Button, "#eff0f1", "#34383d"),
+            (QPalette.ColorRole.Text, "#232629", "#eff0f1"),
+            (QPalette.ColorRole.WindowText, "#232629", "#eff0f1"),
+            (QPalette.ColorRole.ButtonText, "#232629", "#eff0f1"),
+            (QPalette.ColorRole.PlaceholderText, "#60666c", "#a9adb2"),
+            (QPalette.ColorRole.Highlight, "#287fac", "#287fac"),
+            (QPalette.ColorRole.HighlightedText, "#ffffff", "#ffffff"),
+        ):
+            palette.setColor(role, QColor(dark_color if dark else light))
+        for role in (QPalette.ColorRole.Text, QPalette.ColorRole.ButtonText):
+            palette.setColor(
+                QPalette.ColorGroup.Disabled, role, QColor("#92979c" if dark else "#74797e")
+            )
+        app.setStyle("Fusion")
+        app.setPalette(palette)
     apply_theme(app)
     source = Path.home() / "Downloads" / "Aurora Studio.exe"
     executable = ExecutableInfo(
@@ -83,7 +108,10 @@ def main() -> None:
             int(os.environ.get("RUNEXE_SCREENSHOT_WIDTH", "1180")),
             int(os.environ.get("RUNEXE_SCREENSHOT_HEIGHT", "790")),
         )
-        window._analysis_ready(AnalysisBundle(source, executable, host, compatibility, [proton]))
+        if os.environ.get("RUNEXE_SCREENSHOT_EMPTY") != "1":
+            window._analysis_ready(
+                AnalysisBundle(source, executable, host, compatibility, [proton])
+            )
         window.show()
         app.processEvents()
         selected_page = os.environ.get("RUNEXE_SCREENSHOT_PAGE", "overview")
