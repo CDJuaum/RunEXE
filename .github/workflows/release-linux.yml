@@ -29,10 +29,12 @@ concurrency:
 
 jobs:
   source:
-    # New tags emit create AND push: create handles new tags, push handles updates.
+    # Accept every non-deleted tag push. GitHub does not reliably emit a separate
+    # Actions `create` run for annotated tags, so rejecting push events with
+    # `created=true` can skip an entire release.
     if: >-
       (github.event_name == 'create' && github.event.ref_type == 'tag') ||
-      (github.event_name == 'push' && !github.event.created && !github.event.deleted) ||
+      (github.event_name == 'push' && !github.event.deleted) ||
       github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
     runs-on: ubuntu-22.04
     timeout-minutes: 5

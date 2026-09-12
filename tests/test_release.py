@@ -78,3 +78,10 @@ def test_glibc_frozen_build_collects_qt_quick_runtime_while_musl_stays_cli_only(
     assert 'if [ "$1" = glibc ]; then' in script
     assert "python -m pip install '.[dev]' 'pyinstaller==6.22.2'" in script
     assert "python -m pip install '.[dev,gui]' 'pyinstaller==6.22.2'" in script
+
+
+def test_release_workflow_accepts_new_tag_pushes():
+    workflow = (ROOT / ".github/workflows/release-linux.yml").read_text(encoding="utf-8")
+
+    assert "github.event_name == 'push' && !github.event.deleted" in workflow
+    assert "!github.event.created" not in workflow
