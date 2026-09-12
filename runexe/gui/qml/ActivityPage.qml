@@ -5,22 +5,32 @@ import QtQuick.Layouts
 Item {
     id: root
     property var exportDialog
+    WheelScrollHandler { flickable: activityList }
 
     ColumnLayout {
         anchors.fill: parent
         anchors.margins: Theme.pageMargin
         spacing: 12
 
-        RowLayout {
+        ColumnLayout {
             Layout.fillWidth: true
             SectionTitle {
                 Layout.fillWidth: true
                 title: "Session activity"
                 description: "Analysis results and application output for this session."
             }
-            AppButton { text: "Export report"; onClicked: root.exportDialog.open() }
-            AppButton { text: "Copy"; onClicked: controller.copyActivity() }
-            AppButton { text: "Clear"; onClicked: clearDialog.open() }
+            RowLayout {
+                Layout.fillWidth: true
+                Switch {
+                    text: "Desktop notifications"
+                    checked: controller.notificationsEnabled
+                    onToggled: controller.setNotificationsEnabled(checked)
+                }
+                Item { Layout.fillWidth: true }
+                AppButton { text: "Export report"; onClicked: root.exportDialog.open() }
+                AppButton { text: "Copy"; onClicked: controller.copyActivity() }
+                AppButton { text: "Clear"; onClicked: clearDialog.open() }
+            }
         }
 
         Rectangle {
@@ -32,13 +42,31 @@ Item {
 
             ListView {
                 id: activityList
+                objectName: "activityList"
+                property bool followTail: true
+                property bool positioningAtTail: false
                 anchors.fill: parent
                 anchors.margins: 8
                 clip: true
                 spacing: 2
                 model: controller.activityModel
                 boundsBehavior: Flickable.StopAtBounds
+                WheelScrollHandler { flickable: activityList }
                 ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                onContentYChanged: {
+                    if (!positioningAtTail && count > 0)
+                        followTail = atYEnd
+                }
+                onContentHeightChanged: {
+                    if (followTail && !positioningAtTail)
+                        Qt.callLater(positionAtTail)
+                }
+                function positionAtTail() {
+                    positioningAtTail = true
+                    positionViewAtEnd()
+                    positioningAtTail = false
+                    followTail = true
+                }
                 delegate: Item {
                     required property string text
                     width: activityList.width
@@ -65,17 +93,19 @@ Item {
             Connections {
                 target: controller.activityModel
                 function onCountChanged() {
-                    if (activityList.count > 0)
-                        activityList.positionViewAtEnd()
+                    if (activityList.count === 0) {
+                        activityList.followTail = true
+                    } else if (activityList.followTail) {
+                        Qt.callLater(activityList.positionAtTail)
+                    }
                 }
             }
         }
     }
 
-    Dialog {
+    AppDialog {
         id: clearDialog
-        anchors.centerIn: parent
-        modal: true
+        severity: "warning"
         title: "Clear session activity?"
         standardButtons: Dialog.Yes | Dialog.Cancel
         onAccepted: controller.clearActivity()

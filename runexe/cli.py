@@ -253,6 +253,15 @@ def analyze(
                 ("Selected runtime", compatibility.recommended_runtime),
                 ("Backend", compatibility.backend),
                 ("Prefix architecture", compatibility.wine_arch or "N/A"),
+                (
+                    "Local compatibility score",
+                    (
+                        f"{compatibility.compatibility_score}/100 "
+                        f"({compatibility.compatibility_rating})"
+                        if compatibility.compatibility_score is not None
+                        else compatibility.compatibility_rating
+                    ),
+                ),
                 ("Status", status_text(not compatibility.blocking_issues)),
             ],
         )

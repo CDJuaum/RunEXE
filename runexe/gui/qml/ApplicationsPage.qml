@@ -4,6 +4,7 @@ import QtQuick.Layouts
 
 Item {
     id: root
+    WheelScrollHandler { flickable: applicationList }
 
     ColumnLayout {
         anchors.fill: parent
@@ -54,6 +55,7 @@ Item {
 
             ModelListView {
                 id: applicationList
+                objectName: "applicationList"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.minimumHeight: 240
@@ -107,10 +109,9 @@ Item {
         }
     }
 
-    Dialog {
+    AppDialog {
         id: forgetDialog
-        anchors.centerIn: parent
-        modal: true
+        severity: "warning"
         title: "Forget application?"
         standardButtons: Dialog.Yes | Dialog.Cancel
         onAccepted: controller.forgetSelectedApplication()
@@ -125,10 +126,9 @@ Item {
         }
     }
 
-    Dialog {
+    AppDialog {
         id: pruneDialog
-        anchors.centerIn: parent
-        modal: true
+        severity: "warning"
         title: "Prune missing applications?"
         standardButtons: Dialog.Yes | Dialog.Cancel
         onAccepted: controller.pruneMissingApplications()

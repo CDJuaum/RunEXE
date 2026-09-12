@@ -9,6 +9,7 @@ Flickable {
     clip: true
     boundsBehavior: Flickable.StopAtBounds
     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+    WheelScrollHandler { flickable: root }
 
     ColumnLayout {
         id: content

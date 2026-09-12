@@ -106,6 +106,8 @@ More compatibility data is one of the long-term goals of the project (see [Roadm
 - **User-level installation** - one command installs an isolated copy without changing the system Python, and a guarded uninstaller preserves application data
 - **Desktop integration** - adds RunEXE and its logo to freedesktop application menus and the Open With list
 - **Automation-friendly reports** - emits the full analysis and compatibility result as JSON
+- **Explainable compatibility score** - summarizes local blockers, warnings, dependency setup, and host readiness without pretending to predict success probability
+- **Desktop completion notifications** - uses the Linux desktop notification service for background setup, backup, and application completion while RunEXE is not focused
 
 ## 📋 Requirements
 
@@ -461,7 +463,7 @@ runexe version
 - [x] Automatic Wine and Proton configuration actions
 - [x] Live non-blocking application output
 - [x] Persistent desktop preferences and keyboard navigation
-- [ ] Desktop notifications
+- [x] Desktop notifications for background task and application completion
 - [x] Recent-application history and per-app launch presets
 - [x] More Windows runtime detection
 - [x] Better DirectX dependency detection
@@ -487,8 +489,10 @@ runexe version
 ### Future
 
 - [ ] Launch existing Steam titles by App ID
-- [ ] More advanced compatibility scoring
-- [ ] Native `.deb`, RPM, Flatpak, and AppImage packages
+- [x] Explainable local compatibility scoring from blockers, warnings, dependencies, and host readiness
+- [ ] Extend compatibility scoring with broader application-specific evidence
+- [x] Native `.deb` and RPM packages
+- [ ] Flatpak and AppImage packages
 - [ ] Application database / community compatibility data
 
 ## 🛡️ Notes

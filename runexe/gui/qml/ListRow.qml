@@ -54,6 +54,7 @@ Rectangle {
         anchors.fill: parent
         hoverEnabled: true
         acceptedButtons: Qt.LeftButton
+        onWheel: function(wheel) { wheel.accepted = false }
         onClicked: root.selectedRequested()
         onDoubleClicked: root.activated()
     }

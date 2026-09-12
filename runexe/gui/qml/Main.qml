@@ -81,12 +81,9 @@ ApplicationWindow {
         onAccepted: controller.exportSupportReport(selectedFile.toString())
     }
 
-    Dialog {
+    AppDialog {
         id: messageDialog
-        property string severity: "info"
         property string body: ""
-        anchors.centerIn: Overlay.overlay
-        modal: true
         width: Math.min(480, window.width - 80)
         standardButtons: Dialog.Ok
         contentItem: Text {
@@ -97,10 +94,9 @@ ApplicationWindow {
         }
     }
 
-    Dialog {
+    AppDialog {
         id: closeDialog
-        anchors.centerIn: Overlay.overlay
-        modal: true
+        severity: "warning"
         title: "Application still running"
         standardButtons: Dialog.Yes | Dialog.Cancel
         onAccepted: controller.confirmClose()

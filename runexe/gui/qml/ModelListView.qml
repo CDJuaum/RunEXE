@@ -10,6 +10,7 @@ ListView {
     boundsBehavior: Flickable.StopAtBounds
     reuseItems: true
     highlightMoveDuration: 120
+    WheelScrollHandler { flickable: root }
     ScrollBar.vertical: ScrollBar {
         id: verticalBar
         policy: ScrollBar.AsNeeded

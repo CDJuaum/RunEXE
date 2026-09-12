@@ -152,6 +152,11 @@ class CompatibilityReport:
     # Human-readable reasons behind `category`, e.g. "Steam API import
     # (steam_api64.dll)". Empty when category was set some other way.
     classification_signals: list[str] = field(default_factory=list)
+    # Explainable local readiness estimate derived from RunEXE's static analysis
+    # and host checks. This is not a predicted success probability.
+    compatibility_score: int | None = None
+    compatibility_rating: str = "Not scored"
+    compatibility_factors: list[str] = field(default_factory=list)
 
 
 @dataclass

@@ -754,7 +754,7 @@ def analyze_compatibility(
                 "require additional Wine/Proton configuration."
             )
 
-    return CompatibilityReport(
+    report = CompatibilityReport(
         application_type=application_type,
         architecture=architecture,
         category=category,
@@ -772,3 +772,66 @@ def analyze_compatibility(
         classification_confidence=classification.confidence,
         classification_signals=classification.signals,
     )
+    score, rating, factors = calculate_compatibility_score(report, host)
+    report.compatibility_score = score
+    report.compatibility_rating = rating
+    report.compatibility_factors = factors
+    return report
+
+
+def calculate_compatibility_score(
+    report: CompatibilityReport, host: HostInfo | None = None
+) -> tuple[int, str, list[str]]:
+    """Return an explainable local readiness score for a compatibility report.
+
+    The score summarizes evidence RunEXE can inspect locally. It deliberately avoids
+    presenting itself as a probability that an application will run successfully.
+    """
+
+    if not report.supported:
+        return 0, "Unsupported", ["The executable or host architecture is unsupported."]
+
+    score = 100
+    factors: list[str] = []
+
+    if report.blocking_issues:
+        penalty = min(75, 55 + 10 * (len(report.blocking_issues) - 1))
+        score -= penalty
+        factors.append(
+            f"-{penalty}: {len(report.blocking_issues)} blocking issue(s) must be resolved "
+            "before launch."
+        )
+    else:
+        factors.append("No blocking launch issues were detected.")
+
+    if report.warnings:
+        penalty = min(36, 12 * len(report.warnings))
+        score -= penalty
+        factors.append(f"-{penalty}: {len(report.warnings)} compatibility warning(s) need review.")
+    else:
+        factors.append("No compatibility warnings were detected.")
+
+    if report.required_verbs:
+        penalty = min(12, 3 * len(report.required_verbs))
+        score -= penalty
+        factors.append(
+            f"-{penalty}: {len(report.required_verbs)} additional Windows component(s) may need "
+            "provisioning."
+        )
+
+    if host is None:
+        score -= 8
+        factors.append("-8: Host runtime and graphics readiness were not checked.")
+
+    score = max(0, min(100, score))
+    if report.blocking_issues:
+        rating = "Blocked"
+    elif score >= 90:
+        rating = "High readiness"
+    elif score >= 75:
+        rating = "Good readiness"
+    elif score >= 55:
+        rating = "Needs review"
+    else:
+        rating = "Low readiness"
+    return score, rating, factors

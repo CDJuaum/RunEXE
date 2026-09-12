@@ -261,6 +261,35 @@ def test_anti_cheat_is_a_warning_not_a_hard_blocker(tmp_path):
     assert detect_anti_cheat_warnings(app)
     assert report.warnings
     assert not report.blocking_issues
+    assert report.compatibility_score == 80
+    assert report.compatibility_rating == "Good readiness"
+    assert any("compatibility warning" in factor for factor in report.compatibility_factors)
+
+
+def test_local_compatibility_score_is_high_for_clean_ready_host(tmp_path):
+    app = executable(tmp_path)
+    host = HostInfo("x86_64", True, "wine-10", True, True, True, vulkan_supported=True)
+
+    report = analyze_compatibility(app, host)
+
+    assert report.compatibility_score == 100
+    assert report.compatibility_rating == "High readiness"
+    assert report.compatibility_factors[:2] == [
+        "No blocking launch issues were detected.",
+        "No compatibility warnings were detected.",
+    ]
+
+
+def test_local_compatibility_score_marks_current_runtime_blockers(tmp_path):
+    app = executable(tmp_path)
+    host = HostInfo("x86_64", False, None, None, None, False)
+
+    report = analyze_compatibility(app, host)
+
+    assert report.blocking_issues
+    assert report.compatibility_score == 45
+    assert report.compatibility_rating == "Blocked"
+    assert any("blocking issue" in factor for factor in report.compatibility_factors)
 
 
 def test_x86_is_not_marked_unsupported_when_host_probe_is_inconclusive(tmp_path):

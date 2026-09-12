@@ -2,6 +2,24 @@
 
 All notable RunEXE changes are documented here.
 
+## [0.9.0] - 2026-09-12
+
+### Added
+
+- Compatibility reports now include an explainable local readiness score with the factors
+  that affected it. The score summarizes RunEXE's own blocker, warning, dependency, and host
+  evidence and is not presented as a probability that an application will run successfully.
+- The desktop interface can send best-effort Linux desktop notifications when background setup,
+  backup/restore work, or a launched application finishes while RunEXE is not focused. The
+  preference is available on Activity and is saved between sessions.
+
+### Fixed
+
+- Physical mouse-wheel scrolling is routed consistently through scroll pages and management
+  lists, including when the pointer is over a list row, page header, or action area. Touchpad
+  scrolling remains handled natively by Qt Quick. Live Activity output also stops forcing the
+  view back to the newest line after the user scrolls up to inspect earlier output.
+
 ## [0.8.0] - 2026-09-12
 
 ### Changed

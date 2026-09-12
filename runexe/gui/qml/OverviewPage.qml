@@ -4,11 +4,13 @@ import QtQuick.Layouts
 
 Flickable {
     id: root
+    objectName: "overviewPage"
     contentWidth: width
     contentHeight: content.implicitHeight + 32
     clip: true
     boundsBehavior: Flickable.StopAtBounds
     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+    WheelScrollHandler { flickable: root }
 
     property var openFileDialog
 
@@ -77,13 +79,14 @@ Flickable {
 
         GridLayout {
             Layout.fillWidth: true
-            columns: root.width >= 1250 ? 4 : (root.width >= 760 ? 2 : 1)
+            columns: root.width >= 1450 ? 5 : (root.width >= 760 ? 2 : 1)
             columnSpacing: 10
             rowSpacing: 10
             MetricCard { Layout.fillWidth: true; title: "File format"; metric: controller.fileMetric }
             MetricCard { Layout.fillWidth: true; title: "Architecture"; metric: controller.architectureMetric }
             MetricCard { Layout.fillWidth: true; title: "Selected runtime"; metric: controller.runtimeMetric }
             MetricCard { Layout.fillWidth: true; title: "Readiness"; metric: controller.readinessMetric }
+            MetricCard { Layout.fillWidth: true; title: "Compatibility"; metric: controller.compatibilityMetric }
         }
 
         Card {

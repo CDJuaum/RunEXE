@@ -42,8 +42,29 @@ def test_controller_exposes_analysis_state_without_widget_dependencies(qt_app, t
     assert controller.selectedPath == str(path)
     assert controller.fileMetric["value"] == executable.format
     assert controller.readinessMetric["state"] in {"neutral", "success", "warning"}
+    assert controller.compatibilityMetric["value"] == f"{report.compatibility_score}/100"
+    assert controller.compatibilityMetric["detail"] == report.compatibility_rating
     assert controller.launchEnabled
     assert controller.environmentPreview
+
+
+def test_controller_desktop_notifications_can_be_disabled(qt_app, tmp_path):
+    controller = RunEXEController(
+        auto_refresh=False,
+        application_library=ApplicationLibrary(tmp_path / "library.json"),
+    )
+    notifications = []
+    controller.notificationRequested.connect(lambda *message: notifications.append(message))
+
+    controller.setNotificationsEnabled(False)
+    controller._notify("Hidden", "This should not be emitted")
+    assert not controller.notificationsEnabled
+    assert notifications == []
+
+    controller.setNotificationsEnabled(True)
+    controller._notify("Ready", "Background work completed")
+    assert controller.notificationsEnabled
+    assert notifications == [("Ready", "Background work completed")]
 
 
 def test_controller_restores_per_application_launch_preset(qt_app, tmp_path):
@@ -118,6 +139,59 @@ def test_controller_launch_guard_cannot_be_bypassed_while_busy(qt_app, tmp_path,
     assert started == []
     assert "Wait for the current task" in controller.taskStatus
     controller._workers.clear()
+
+
+def test_controller_launch_guard_explains_why_action_is_blocked(qt_app, tmp_path):
+    controller = RunEXEController(
+        auto_refresh=False,
+        application_library=ApplicationLibrary(tmp_path / "library.json"),
+    )
+    messages = []
+    controller.messageRequested.connect(lambda *message: messages.append(message))
+    controller._workers["prepare"] = object()
+
+    controller.launchApplication()
+
+    assert messages[-1][0] == "info"
+    assert "working" in messages[-1][1].lower()
+    assert "current task" in messages[-1][2].lower()
+    controller._workers.clear()
+
+
+def test_managed_action_without_selection_shows_feedback_and_navigates(qt_app, tmp_path):
+    controller = RunEXEController(
+        auto_refresh=False,
+        application_library=ApplicationLibrary(tmp_path / "library.json"),
+    )
+    messages = []
+    pages = []
+    controller.messageRequested.connect(lambda *message: messages.append(message))
+    controller.navigateRequested.connect(pages.append)
+
+    controller.openSelectedEnvironmentFolder()
+
+    assert messages[-1] == (
+        "info",
+        "Select an environment",
+        "Choose an environment from the list before using this action.",
+    )
+    assert pages[-1] == controller.PAGE_ENVIRONMENTS
+
+
+def test_nonzero_application_exit_is_visible_to_user(qt_app, tmp_path):
+    controller = RunEXEController(
+        auto_refresh=False,
+        application_library=ApplicationLibrary(tmp_path / "library.json"),
+    )
+    messages = []
+    controller.messageRequested.connect(lambda *message: messages.append(message))
+
+    controller._application_finished(17, None)
+
+    assert messages[-1][0] == "error"
+    assert messages[-1][1] == "Application exited unexpectedly"
+    assert "code 17" in messages[-1][2]
+    assert "Activity" in messages[-1][2]
 
 
 def test_controller_exports_same_support_report_schema(qt_app, tmp_path):

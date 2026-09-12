@@ -4,6 +4,7 @@ import QtQuick.Layouts
 
 Item {
     id: root
+    WheelScrollHandler { flickable: backupList }
 
     ColumnLayout {
         anchors.fill: parent
@@ -39,6 +40,7 @@ Item {
 
             ModelListView {
                 id: backupList
+                objectName: "backupList"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.minimumHeight: 240
@@ -88,10 +90,9 @@ Item {
         }
     }
 
-    Dialog {
+    AppDialog {
         id: restoreDialog
-        anchors.centerIn: parent
-        modal: true
+        severity: "warning"
         title: "Restore environment backup?"
         standardButtons: Dialog.Yes | Dialog.Cancel
         onAccepted: controller.restoreSelectedBackup()
@@ -106,10 +107,9 @@ Item {
         }
     }
 
-    Dialog {
+    AppDialog {
         id: deleteDialog
-        anchors.centerIn: parent
-        modal: true
+        severity: "error"
         title: "Delete environment backup?"
         standardButtons: Dialog.Yes | Dialog.Cancel
         onAccepted: controller.removeSelectedBackup()

@@ -11,6 +11,7 @@ from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuickControls2 import QQuickStyle
 
 from .controller import RunEXEController
+from .notifications import DesktopNotifier
 
 _live_engines: list[tuple[QQmlApplicationEngine, RunEXEController]] = []
 
@@ -54,6 +55,9 @@ def run_gui(initial_file: Path | None = None) -> int:
 
     controller = RunEXEController(initial_file)
     engine = create_engine(controller)
+    root_window = engine.rootObjects()[0]
+    notifier = DesktopNotifier(root_window, _asset_path(), controller)
+    controller.notificationRequested.connect(notifier.show)
     _live_engines.append((engine, controller))
     if owns_application:
         try:

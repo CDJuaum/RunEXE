@@ -85,6 +85,8 @@ def test_json_analysis_is_machine_readable(tmp_path):
     assert result.exit_code == 0
     assert '"architecture": "x86"' in result.stdout
     assert '"compatibility"' in result.stdout
+    assert '"compatibility_score":' in result.stdout
+    assert '"compatibility_factors":' in result.stdout
 
 
 def test_run_forwards_every_argument_after_separator(tmp_path, monkeypatch):

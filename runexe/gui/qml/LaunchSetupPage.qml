@@ -5,11 +5,13 @@ import QtQuick.Layouts
 
 Flickable {
     id: root
+    objectName: "launchSetupPage"
     contentWidth: width
     contentHeight: content.implicitHeight + 32
     clip: true
     boundsBehavior: Flickable.StopAtBounds
     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+    WheelScrollHandler { flickable: root }
     property var prefixDialog
 
     function optionIndex(options, value) {

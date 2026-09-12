@@ -217,6 +217,7 @@ class RunEXEController(QObject):
     navigateRequested = Signal(int)
     profileFocusRequested = Signal()
     messageRequested = Signal(str, str, str)
+    notificationRequested = Signal(str, str)
     closeConfirmationRequested = Signal()
 
     def __init__(
@@ -267,12 +268,18 @@ class RunEXEController(QObject):
             self._dependencies = "auto"
         self._prefix = ""
         self._arguments = ""
+        self._notifications_enabled = bool(
+            self.settings.value("notifications/enabled", True, type=bool)
+        )
         self.settings.remove("runtime/prefix")
 
         self._file_metric = _metric("Not analyzed", "Select Windows software to begin")
         self._arch_metric = _metric("Not analyzed", "Select Windows software to begin")
         self._runtime_metric = _metric("Not analyzed", "Select Windows software to begin")
         self._readiness_metric = _metric("Not analyzed", "Select Windows software to begin")
+        self._compatibility_metric = _metric(
+            "Not scored", "Analyze an application to calculate local readiness"
+        )
         self._wine_metric = _metric("Checking", "Detecting Wine")
         self._proton_metric = _metric("Checking", "Detecting Proton")
         self._winetricks_metric = _metric("Checking", "Detecting Winetricks")
@@ -443,6 +450,14 @@ class RunEXEController(QObject):
         return dict(self._readiness_metric)
 
     @Property("QVariantMap", notify=stateChanged)
+    def compatibilityMetric(self) -> dict[str, str]:
+        return dict(self._compatibility_metric)
+
+    @Property(bool, notify=stateChanged)
+    def notificationsEnabled(self) -> bool:
+        return self._notifications_enabled
+
+    @Property("QVariantMap", notify=stateChanged)
     def wineMetric(self) -> dict[str, str]:
         return dict(self._wine_metric)
 
@@ -579,6 +594,12 @@ class RunEXEController(QObject):
     @Property(str, notify=stateChanged)
     def dependencyMode(self) -> str:
         return self._dependencies
+
+    @Slot(bool)
+    def setNotificationsEnabled(self, enabled: bool) -> None:
+        self._notifications_enabled = enabled
+        self.settings.setValue("notifications/enabled", enabled)
+        self.stateChanged.emit()
 
     @Property(str, notify=stateChanged)
     def prefix(self) -> str:
@@ -759,7 +780,9 @@ class RunEXEController(QObject):
             return
         path = _local_path(value)
         if any(key not in {"library", "runtimes"} for key in self._workers):
-            self._set_task_status("Wait for the current task to finish before analyzing")
+            message = "Wait for the current task to finish before analyzing another application"
+            self._set_task_status(message)
+            self.messageRequested.emit("info", "Analysis already in progress", message + ".")
             return
         if self._application_running():
             self.messageRequested.emit(
@@ -781,6 +804,9 @@ class RunEXEController(QObject):
         self._arch_metric = _metric("Pending", "Waiting for analysis")
         self._runtime_metric = _metric("Pending", "Waiting for analysis")
         self._readiness_metric = _metric("Analyzing", "Checking the selected file", "warning")
+        self._compatibility_metric = _metric(
+            "Pending", "Calculating local compatibility readiness", "warning"
+        )
         self._guidance = ["Analysis is in progress. Launch is available after validation."]
         self._environment_status = "Awaiting analysis"
         self._update_environment_preview()
@@ -848,6 +874,7 @@ class RunEXEController(QObject):
         self._file_metric = _metric("Unavailable", "Analysis did not complete", "error")
         self._arch_metric = _metric("Unavailable", "Analysis did not complete", "error")
         self._runtime_metric = _metric("Unavailable", "Analysis did not complete", "error")
+        self._compatibility_metric = _metric("Unavailable", "Analysis did not complete", "error")
         self._guidance = [message]
         self._task_failed(message, details)
 
@@ -1008,6 +1035,7 @@ class RunEXEController(QObject):
         self._log(f"Managed Proton ready: {installation.name} at {installation.install_dir}")
         self._task_status = f"Installed {installation.name}"
         self._set_header_status("Proton installed", "ready")
+        self._notify("Proton installed", f"{installation.name} is ready to use.")
         QTimer.singleShot(0, self.refreshRuntimes)
         self.stateChanged.emit()
 
@@ -1026,6 +1054,7 @@ class RunEXEController(QObject):
         self._log("Vulkan tools installation completed.")
         self._task_status = "Vulkan tools installed"
         self._set_header_status("Vulkan tools installed", "ready")
+        self._notify("Vulkan tools installed", "Graphics readiness can now be checked again.")
         QTimer.singleShot(0, self.refreshRuntimes)
         self.stateChanged.emit()
 
@@ -1120,6 +1149,7 @@ class RunEXEController(QObject):
         )
         self._environment_status = f"READY | {prepared.runtime_name}"
         self._set_header_status("Environment ready", "ready")
+        self._notify("Environment ready", f"{prepared.runtime_name} setup finished successfully.")
         self.stateChanged.emit()
 
     @Slot(str)
@@ -1217,6 +1247,7 @@ class RunEXEController(QObject):
             return
         row = self.applicationsModel.item(self.selectedApplicationIndex)
         if not row:
+            self._selection_required("application", self.PAGE_APPLICATIONS)
             return
         path = Path(str(row["path"]))
         if not path.exists():
@@ -1233,7 +1264,11 @@ class RunEXEController(QObject):
     @Slot()
     def forgetSelectedApplication(self) -> None:
         row = self.applicationsModel.item(self.selectedApplicationIndex)
-        if not row or self._library_busy():
+        if self._library_busy():
+            self._library_action_blocked()
+            return
+        if not row:
+            self._selection_required("application", self.PAGE_APPLICATIONS)
             return
         try:
             self.application_library.forget(Path(str(row["path"])))
@@ -1246,6 +1281,7 @@ class RunEXEController(QObject):
     @Slot()
     def pruneMissingApplications(self) -> None:
         if self._library_busy():
+            self._library_action_blocked()
             return
         try:
             removed = self.application_library.prune_missing()
@@ -1281,6 +1317,7 @@ class RunEXEController(QObject):
     def openSelectedEnvironmentFolder(self) -> None:
         environment = self._selected_environment()
         if environment is None:
+            self._selection_required("environment", self.PAGE_ENVIRONMENTS)
             return
         if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(environment.path))):
             self.messageRequested.emit(
@@ -1292,7 +1329,15 @@ class RunEXEController(QObject):
         if self._action_blocked():
             return
         environment = self._selected_environment()
-        if environment is None or tool not in CONFIGURATION_TOOLS:
+        if environment is None:
+            self._selection_required("environment", self.PAGE_ENVIRONMENTS)
+            return
+        if tool not in CONFIGURATION_TOOLS:
+            self.messageRequested.emit(
+                "error",
+                "Configuration tool unavailable",
+                "RunEXE does not recognize the selected configuration tool.",
+            )
             return
         try:
             open_environment_configuration(environment, tool)
@@ -1307,9 +1352,11 @@ class RunEXEController(QObject):
     @Slot()
     def backupSelectedEnvironment(self) -> None:
         if self._library_busy():
+            self._library_action_blocked()
             return
         environment = self._selected_environment()
         if environment is None:
+            self._selection_required("environment", self.PAGE_ENVIRONMENTS)
             return
         self._start_task(
             "backup-environment",
@@ -1321,15 +1368,20 @@ class RunEXEController(QObject):
     def _environment_backed_up(self, backup: BackupInfo) -> None:
         self._log(f"Created environment backup: {backup.identifier}")
         self._task_status = f"Backup ready: {backup.identifier}"
+        self._notify("Backup ready", f"Created {backup.application} environment backup.")
         QTimer.singleShot(0, self.refreshLibrary)
         self.stateChanged.emit()
 
     @Slot(bool)
     def removeSelectedEnvironment(self, with_backup: bool) -> None:
-        if self._action_blocked() or self._library_busy():
+        if self._action_blocked():
+            return
+        if self._library_busy():
+            self._library_action_blocked()
             return
         environment = self._selected_environment()
         if environment is None:
+            self._selection_required("environment", self.PAGE_ENVIRONMENTS)
             return
 
         def remove() -> tuple[str, str | None]:
@@ -1351,15 +1403,20 @@ class RunEXEController(QObject):
         self._log(f"Removed managed environment: {identifier}")
         self._task_status = f"Removed {identifier}"
         self._selected_environment_id = ""
+        self._notify("Environment removed", f"Removed managed environment {identifier}.")
         QTimer.singleShot(0, self.refreshLibrary)
         self.stateChanged.emit()
 
     @Slot()
     def restoreSelectedBackup(self) -> None:
-        if self._action_blocked() or self._library_busy():
+        if self._action_blocked():
+            return
+        if self._library_busy():
+            self._library_action_blocked()
             return
         backup = self._selected_backup()
         if backup is None:
+            self._selection_required("backup", self.PAGE_BACKUPS)
             return
         self._start_task(
             "restore-backup",
@@ -1371,15 +1428,18 @@ class RunEXEController(QObject):
     def _backup_restored(self, identifier: str, target: Path) -> None:
         self._log(f"Restored backup {identifier}: {target}")
         self._task_status = f"Restored {identifier}"
+        self._notify("Backup restored", f"Restored the environment to {target}.")
         QTimer.singleShot(0, self.refreshLibrary)
         self.stateChanged.emit()
 
     @Slot()
     def removeSelectedBackup(self) -> None:
         if self._library_busy():
+            self._library_action_blocked()
             return
         backup = self._selected_backup()
         if backup is None:
+            self._selection_required("backup", self.PAGE_BACKUPS)
             return
         self._start_task(
             "remove-backup",
@@ -1458,6 +1518,9 @@ class RunEXEController(QObject):
             exit_code,
             self.compatibility.profile if self.compatibility is not None else None,
         )
+        completed_name = (
+            self._active_launch_path.name if self._active_launch_path else "Application"
+        )
         if self._active_launch_path is not None:
             try:
                 self.application_library.record_exit(self._active_launch_path, exit_code)
@@ -1481,10 +1544,27 @@ class RunEXEController(QObject):
             self.profileFocusRequested.emit()
             self._task_status = diagnostic.title
             self._set_header_status(diagnostic.title, "warning")
+            self.messageRequested.emit("warning", diagnostic.title, diagnostic.message)
+            self._notify(diagnostic.title, diagnostic.message)
         else:
             self._set_header_status(
                 "Launch completed" if exit_code == 0 else "Application failed",
                 "ready" if exit_code == 0 else "error",
+            )
+            if exit_code != 0:
+                self.messageRequested.emit(
+                    "error",
+                    "Application exited unexpectedly",
+                    f"The application exited with code {exit_code}. "
+                    "Open Activity to review its output and errors.",
+                )
+            self._notify(
+                "Application finished" if exit_code == 0 else "Application exited unexpectedly",
+                (
+                    f"{completed_name} exited normally."
+                    if exit_code == 0
+                    else f"{completed_name} exited with code {exit_code}."
+                ),
             )
         self._update_environment_preview()
         self._update_controls_state()
@@ -1598,6 +1678,25 @@ class RunEXEController(QObject):
         else:
             self._readiness_metric = _metric("Ready", "No blocking issues detected", "success")
 
+        score = report.compatibility_score
+        if score is None:
+            self._compatibility_metric = _metric(
+                "Not scored", "Local compatibility estimate unavailable"
+            )
+        else:
+            score_state = (
+                "error"
+                if report.blocking_issues
+                else "success"
+                if score >= 90
+                else "warning"
+                if score < 75 or report.warnings
+                else "neutral"
+            )
+            self._compatibility_metric = _metric(
+                f"{score}/100", report.compatibility_rating, score_state
+            )
+
         product = "Unknown product"
         if executable.version_info:
             product = executable.version_info.strings.get("ProductName", product)
@@ -1611,6 +1710,7 @@ class RunEXEController(QObject):
         self._guidance = [
             *(f"BLOCKED  {issue}" for issue in report.blocking_issues),
             *(f"WARNING  {warning}" for warning in report.warnings),
+            *(f"SCORE  {factor}" for factor in report.compatibility_factors),
             *(f"INFO  {note}" for note in report.notes),
         ] or ["No compatibility concerns were detected."]
         self._environment_status = f"{report.backend.upper()} | {report.architecture}"
@@ -1753,17 +1853,39 @@ class RunEXEController(QObject):
     def _action_blocked(self) -> bool:
         blocking = [key for key in self._workers if key != "library"]
         if blocking:
-            self._set_task_status("Wait for the current task to finish")
+            message = "Wait for the current task to finish"
+            self._set_task_status(message)
+            self.messageRequested.emit(
+                "info", "Action unavailable while RunEXE is working", message + "."
+            )
             return True
         if self._application_running():
-            self._set_task_status("Close the running application before changing its setup")
+            message = "Close the running application before changing its setup"
+            self._set_task_status(message)
+            self.messageRequested.emit("info", "Application is still running", message + ".")
             return True
         return False
+
+    def _library_action_blocked(self) -> None:
+        message = "Wait for the current library action to finish"
+        self._set_task_status(message)
+        self.messageRequested.emit("info", "Library action already in progress", message + ".")
+
+    def _selection_required(self, item: str, page: int) -> None:
+        article = "an" if item[:1].lower() in "aeiou" else "a"
+        self.messageRequested.emit(
+            "info",
+            f"Select {article} {item}",
+            f"Choose {article} {item} from the list before using this action.",
+        )
+        self.navigateRequested.emit(page)
 
     # ------------------------------------------------------------- Background tasks
     def _start_task(self, key: str, label: str, function, on_result) -> None:
         if key in self._workers:
-            self._set_task_status(f"{label} is already running")
+            message = f"{label} is already running"
+            self._set_task_status(message)
+            self.messageRequested.emit("info", "Action already in progress", message + ".")
             return
         worker = Worker(function)
         worker.signals.result.connect(on_result)
@@ -1781,6 +1903,7 @@ class RunEXEController(QObject):
         self._log(f"ERROR: {message}")
         self._log(details.rstrip())
         self.messageRequested.emit("error", "RunEXE could not complete the action", message)
+        self._notify("RunEXE action failed", message)
         self.stateChanged.emit()
 
     def _task_finished(self, key: str) -> None:
@@ -1795,6 +1918,10 @@ class RunEXEController(QObject):
     def _set_task_status(self, text: str) -> None:
         self._task_status = text
         self.stateChanged.emit()
+
+    def _notify(self, title: str, body: str) -> None:
+        if self._notifications_enabled:
+            self.notificationRequested.emit(title, body)
 
     def _log(self, message: str) -> None:
         timestamp = datetime.now().strftime("%H:%M:%S")

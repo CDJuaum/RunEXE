@@ -11,9 +11,21 @@ ComboBox {
     rightPadding: 30
 
     delegate: ItemDelegate {
+        id: option
         width: ListView.view ? ListView.view.width : root.width
         text: modelData.label
         highlighted: root.highlightedIndex === index
+        contentItem: Text {
+            text: option.text
+            color: Theme.text
+            verticalAlignment: Text.AlignVCenter
+            leftPadding: 6
+            elide: Text.ElideRight
+        }
+        background: Rectangle {
+            radius: 6
+            color: option.highlighted ? Theme.field : "transparent"
+        }
     }
 
     contentItem: Text {

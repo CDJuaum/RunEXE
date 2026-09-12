@@ -1,6 +1,6 @@
 [project]
 name = "runexe"
-version = "0.8.0"
+version = "0.9.0"
 description = "Analyze and run Windows software on Linux with a desktop GUI or CLI"
 readme = "README.md"
 requires-python = ">=3.10"

@@ -4,6 +4,7 @@ import QtQuick.Layouts
 
 Item {
     id: root
+    WheelScrollHandler { flickable: environmentList }
 
     ColumnLayout {
         anchors.fill: parent
@@ -39,6 +40,7 @@ Item {
 
             ModelListView {
                 id: environmentList
+                objectName: "environmentList"
                 Layout.fillWidth: true
                 Layout.fillHeight: true
                 Layout.minimumHeight: 240
@@ -83,12 +85,29 @@ Item {
                     onClicked: configMenu.open()
                     Menu {
                         id: configMenu
+                        padding: 5
+                        background: Rectangle {
+                            radius: 9
+                            color: Theme.surfaceRaised
+                            border.color: Theme.border
+                            border.width: 1
+                        }
                         Repeater {
                             model: controller.configurationTools
                             delegate: MenuItem {
                                 required property var modelData
                                 text: modelData.label
                                 onTriggered: controller.configureSelectedEnvironment(modelData.key)
+                                contentItem: Text {
+                                    text: parent.text
+                                    color: Theme.text
+                                    verticalAlignment: Text.AlignVCenter
+                                    leftPadding: 8
+                                }
+                                background: Rectangle {
+                                    radius: 6
+                                    color: parent.highlighted ? Theme.field : "transparent"
+                                }
                             }
                         }
                     }
@@ -108,10 +127,9 @@ Item {
         }
     }
 
-    Dialog {
+    AppDialog {
         id: removeDialog
-        anchors.centerIn: parent
-        modal: true
+        severity: "error"
         title: "Remove isolated environment?"
         footer: DialogButtonBox {
             Button { text: "Back up and remove"; DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole; onClicked: { removeDialog.close(); controller.removeSelectedEnvironment(true) } }

@@ -6,7 +6,9 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint, QPointF, Qt
+from PySide6.QtQuick import QQuickItem
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from runexe.gui.controller import RunEXEController
@@ -92,3 +94,153 @@ def test_activity_model_is_bounded_and_append_only_for_qml(qt_app, tmp_path):
     controller.clearActivity()
     assert controller.activityModel.count == 0
     assert controller.activityText == ""
+
+
+def test_applications_page_mouse_wheel_scrolls_list_from_rows_and_page_header(qt_app, tmp_path):
+    controller, engine, root = make_shell(qt_app, tmp_path)
+    controller.applicationsModel.replace(
+        [
+            {
+                "path": f"/tmp/app-{index}.exe",
+                "displayName": f"App {index}",
+                "headline": f"App {index}",
+                "subtitle": "x86_64 • test entry",
+                "detail": f"Example application {index}",
+                "exists": True,
+            }
+            for index in range(30)
+        ]
+    )
+    root.setWidth(920)
+    root.setHeight(680)
+    root.showPage(controller.PAGE_APPLICATIONS)
+    qt_app.processEvents()
+
+    application_list = root.findChild(QQuickItem, "applicationList")
+    assert application_list is not None
+    assert application_list.property("contentHeight") > application_list.height()
+
+    list_scene = application_list.mapToScene(QPointF(application_list.width() / 2, 0))
+    header_point = QPointF(list_scene.x(), list_scene.y() - 45)
+    QTest.wheelEvent(root, header_point, QPoint(0, -120))
+    qt_app.processEvents()
+    assert application_list.property("contentY") > 0
+
+    application_list.setProperty("contentY", 0)
+    row_point = application_list.mapToScene(
+        QPointF(application_list.width() / 2, application_list.height() / 2)
+    )
+    QTest.wheelEvent(root, row_point, QPoint(0, -120))
+    qt_app.processEvents()
+    assert application_list.property("contentY") > 0
+
+    root.close()
+    engine.deleteLater()
+    controller.deleteLater()
+
+
+@pytest.mark.parametrize(
+    ("page", "object_name"),
+    [
+        (RunEXEController.PAGE_OVERVIEW, "overviewPage"),
+        (RunEXEController.PAGE_LAUNCH_SETUP, "launchSetupPage"),
+    ],
+)
+def test_scroll_pages_accept_physical_mouse_wheel(qt_app, tmp_path, page, object_name):
+    controller, engine, root = make_shell(qt_app, tmp_path)
+    root.setWidth(920)
+    root.setHeight(680)
+    root.showPage(page)
+    qt_app.processEvents()
+
+    page_item = root.findChild(QQuickItem, object_name)
+    assert page_item is not None
+    assert page_item.property("contentHeight") > page_item.height()
+
+    point = page_item.mapToScene(QPointF(page_item.width() / 2, page_item.height() / 2))
+    QTest.wheelEvent(root, point, QPoint(0, -120))
+    qt_app.processEvents()
+
+    assert page_item.property("contentY") > 0
+    root.close()
+    engine.deleteLater()
+    controller.deleteLater()
+
+
+def test_activity_page_mouse_wheel_scrolls_output_from_header_and_output(qt_app, tmp_path):
+    controller, engine, root = make_shell(qt_app, tmp_path)
+    for index in range(120):
+        controller._log(f"Activity line {index}: example output that fills the activity view")
+
+    root.setWidth(920)
+    root.setHeight(680)
+    root.showPage(controller.PAGE_ACTIVITY)
+    qt_app.processEvents()
+    activity_list = root.findChild(QQuickItem, "activityList")
+    assert activity_list is not None
+    assert activity_list.property("contentHeight") > activity_list.height()
+
+    activity_list.setProperty("contentY", 0)
+    list_scene = activity_list.mapToScene(QPointF(activity_list.width() / 2, 0))
+    header_point = QPointF(list_scene.x(), list_scene.y() - 35)
+    QTest.wheelEvent(root, header_point, QPoint(0, -120))
+    qt_app.processEvents()
+    assert activity_list.property("contentY") > 0
+
+    activity_list.setProperty("contentY", 0)
+    output_point = activity_list.mapToScene(
+        QPointF(activity_list.width() / 2, activity_list.height() / 2)
+    )
+    QTest.wheelEvent(root, output_point, QPoint(0, -120))
+    qt_app.processEvents()
+    assert activity_list.property("contentY") > 0
+
+    root.close()
+    engine.deleteLater()
+    controller.deleteLater()
+
+
+def test_activity_live_output_respects_user_scroll_until_tail(qt_app, tmp_path):
+    controller, engine, root = make_shell(qt_app, tmp_path)
+    root.setWidth(920)
+    root.setHeight(680)
+    root.showPage(controller.PAGE_ACTIVITY)
+    for index in range(120):
+        controller._log(f"Activity line {index}: example output that fills the activity view")
+    qt_app.processEvents()
+    qt_app.processEvents()
+
+    activity_list = root.findChild(QQuickItem, "activityList")
+    assert activity_list is not None
+    assert activity_list.property("atYEnd") is True
+
+    activity_list.setProperty("contentY", max(0, activity_list.property("contentY") - 300))
+    qt_app.processEvents()
+    scrolled_position = activity_list.property("contentY")
+    assert activity_list.property("followTail") is False
+
+    controller._log("new output while reviewing earlier activity")
+    qt_app.processEvents()
+    qt_app.processEvents()
+    assert activity_list.property("contentY") == pytest.approx(scrolled_position, abs=1)
+
+    output_point = activity_list.mapToScene(
+        QPointF(activity_list.width() / 2, activity_list.height() / 2)
+    )
+    for _ in range(20):
+        QTest.wheelEvent(root, output_point, QPoint(0, -120))
+        qt_app.processEvents()
+        if activity_list.property("atYEnd"):
+            break
+
+    assert activity_list.property("atYEnd") is True
+    assert activity_list.property("followTail") is True
+
+    controller._log("new output while following the tail")
+    qt_app.processEvents()
+    qt_app.processEvents()
+    assert activity_list.property("atYEnd") is True
+
+    root.close()
+    engine.deleteLater()
+    controller.deleteLater()
