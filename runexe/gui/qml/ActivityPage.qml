@@ -4,7 +4,8 @@ import QtQuick.Layouts
 
 Item {
     id: root
-    property var exportDialog
+    objectName: "activityPage"
+    property var exportDialog: null
     WheelScrollHandler { flickable: activityList }
 
     ColumnLayout {
@@ -27,7 +28,11 @@ Item {
                     onToggled: controller.setNotificationsEnabled(checked)
                 }
                 Item { Layout.fillWidth: true }
-                AppButton { text: "Export report"; onClicked: root.exportDialog.open() }
+                AppButton {
+                    text: "Export report"
+                    enabled: root.exportDialog !== null
+                    onClicked: root.exportDialog.open()
+                }
                 AppButton { text: "Copy"; onClicked: controller.copyActivity() }
                 AppButton { text: "Clear"; onClicked: clearDialog.open() }
             }

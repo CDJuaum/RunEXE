@@ -12,7 +12,7 @@ Flickable {
     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
     WheelScrollHandler { flickable: root }
 
-    property var openFileDialog
+    property var openFileDialog: null
 
     function focusProfile() {
         if (!profileCard.visible)
@@ -59,9 +59,10 @@ Flickable {
                     elide: Text.ElideMiddle
                 }
                 AppButton {
+                    objectName: "chooseFileButton"
                     Layout.alignment: Qt.AlignHCenter
                     text: "Choose file"
-                    enabled: controller.interactionEnabled
+                    enabled: controller.interactionEnabled && root.openFileDialog !== null
                     onClicked: root.openFileDialog.open()
                 }
             }

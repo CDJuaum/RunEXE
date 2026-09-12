@@ -194,6 +194,23 @@ def test_nonzero_application_exit_is_visible_to_user(qt_app, tmp_path):
     assert "Activity" in messages[-1][2]
 
 
+def test_application_exit_never_requests_runexe_shutdown(qt_app, tmp_path, monkeypatch):
+    controller = RunEXEController(
+        auto_refresh=False,
+        application_library=ApplicationLibrary(tmp_path / "library.json"),
+    )
+    quit_requests = []
+    monkeypatch.setattr(
+        "runexe.gui.controller.QCoreApplication.quit",
+        lambda: quit_requests.append(True),
+    )
+
+    controller._application_finished(0, None)
+
+    assert quit_requests == []
+    assert controller.taskStatus == "Ready"
+
+
 def test_controller_exports_same_support_report_schema(qt_app, tmp_path):
     target = tmp_path / "support.json"
     controller = RunEXEController(

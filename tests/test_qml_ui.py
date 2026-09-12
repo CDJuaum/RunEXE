@@ -1,4 +1,5 @@
 import os
+import sys
 
 import pytest
 
@@ -6,13 +7,13 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QPoint, QPointF, Qt
+from PySide6.QtCore import QEventLoop, QPoint, QPointF, QProcess, Qt, QTimer
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from runexe.gui.controller import RunEXEController
-from runexe.gui.qml_app import _teardown_engine, create_engine
+from runexe.gui.qml_app import _configure_application, _teardown_engine, create_engine
 from runexe.library import ApplicationLibrary
 
 
@@ -31,6 +32,83 @@ def make_shell(qt_app, tmp_path):
     root = engine.rootObjects()[0]
     qt_app.processEvents()
     return controller, engine, root
+
+
+def test_application_uses_explicit_close_policy(qt_app):
+    previous = qt_app.quitOnLastWindowClosed()
+    try:
+        _configure_application(qt_app)
+        assert qt_app.quitOnLastWindowClosed() is False
+    finally:
+        qt_app.setQuitOnLastWindowClosed(previous)
+
+
+def test_launched_process_exit_keeps_runexe_window_open(qt_app, tmp_path):
+    previous = qt_app.quitOnLastWindowClosed()
+    _configure_application(qt_app)
+    controller, engine, root = make_shell(qt_app, tmp_path)
+    process = QProcess(controller)
+    process.setProgram(sys.executable)
+    process.setArguments(["-c", "pass"])
+    process.finished.connect(controller._application_finished)
+    controller.application_process = process
+    loop = QEventLoop()
+    process.finished.connect(lambda *_: QTimer.singleShot(50, loop.quit))
+
+    process.start()
+    QTimer.singleShot(3000, loop.quit)
+    loop.exec()
+
+    assert controller.application_process is None
+    assert root.isVisible() is True
+    root.close()
+    _teardown_engine(qt_app, engine, controller)
+    qt_app.setQuitOnLastWindowClosed(previous)
+
+
+@pytest.mark.parametrize(
+    ("page", "object_name", "property_name"),
+    [
+        (RunEXEController.PAGE_OVERVIEW, "overviewPage", "openFileDialog"),
+        (RunEXEController.PAGE_LAUNCH_SETUP, "launchSetupPage", "prefixDialog"),
+        (RunEXEController.PAGE_ACTIVITY, "activityPage", "exportDialog"),
+    ],
+)
+def test_loaded_pages_receive_shared_dialogs(qt_app, tmp_path, page, object_name, property_name):
+    controller, engine, root = make_shell(qt_app, tmp_path)
+    root.showPage(page)
+    qt_app.processEvents()
+
+    page_item = root.findChild(QQuickItem, object_name)
+    assert page_item is not None
+    assert page_item.property(property_name) is not None
+
+    root.close()
+    engine.deleteLater()
+    controller.deleteLater()
+
+
+def test_overview_choose_file_button_opens_dialog(qt_app, tmp_path):
+    controller, engine, root = make_shell(qt_app, tmp_path)
+    button = root.findChild(QQuickItem, "chooseFileButton")
+    overview = root.findChild(QQuickItem, "overviewPage")
+    assert button is not None
+    assert overview is not None
+    dialog = overview.property("openFileDialog")
+    assert dialog is not None
+    assert dialog.property("visible") is False
+
+    point = button.mapToScene(QPointF(button.width() / 2, button.height() / 2))
+    QTest.mouseClick(
+        root, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, point.toPoint()
+    )
+    qt_app.processEvents()
+
+    assert dialog.property("visible") is True
+    dialog.close()
+    root.close()
+    engine.deleteLater()
+    controller.deleteLater()
 
 
 def test_qml_teardown_destroys_engine_before_controller(qt_app, tmp_path):

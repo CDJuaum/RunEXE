@@ -2,6 +2,15 @@
 
 All notable RunEXE changes are documented here.
 
+## [0.9.2] - 2026-09-12
+
+### Fixed
+
+- The Overview **Choose file** button, Launch setup folder picker, and Activity export picker now
+  receive their shared dialogs correctly when pages are loaded through QML Loader.
+- Closing a launched Wine/Proton application no longer allows Qt's implicit last-window policy to
+  end RunEXE; desktop shutdown now happens only through RunEXE's explicit close flow.
+
 ## [0.9.1] - 2026-09-12
 
 ### Fixed

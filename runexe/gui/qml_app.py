@@ -24,6 +24,20 @@ def _asset_path() -> Path:
     return Path(__file__).resolve().parent.parent / "assets" / "runexe-logo.png"
 
 
+def _configure_application(app: QGuiApplication) -> None:
+    """Apply RunEXE-wide application metadata and lifecycle policy."""
+
+    # RunEXE owns its close policy explicitly through Main.qml -> requestClose().
+    # Do not let Qt end the event loop just because it believes the last window
+    # closed while an external Wine/Proton process is being torn down.
+    app.setQuitOnLastWindowClosed(False)
+    app.setApplicationName("RunEXE")
+    app.setApplicationDisplayName("RunEXE")
+    app.setOrganizationName("RunEXE")
+    if _asset_path().is_file():
+        app.setWindowIcon(QIcon(str(_asset_path())))
+
+
 def create_engine(controller: RunEXEController) -> QQmlApplicationEngine:
     """Load the QML shell for an already-created controller."""
 
@@ -67,11 +81,7 @@ def run_gui(initial_file: Path | None = None) -> int:
     if app is None:
         QQuickStyle.setStyle("Basic")
         app = QGuiApplication(sys.argv)
-    app.setApplicationName("RunEXE")
-    app.setApplicationDisplayName("RunEXE")
-    app.setOrganizationName("RunEXE")
-    if _asset_path().is_file():
-        app.setWindowIcon(QIcon(str(_asset_path())))
+    _configure_application(app)
 
     controller = RunEXEController(initial_file)
     engine = create_engine(controller)

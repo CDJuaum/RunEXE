@@ -12,7 +12,7 @@ Flickable {
     boundsBehavior: Flickable.StopAtBounds
     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
     WheelScrollHandler { flickable: root }
-    property var prefixDialog
+    property var prefixDialog: null
 
     function optionIndex(options, value) {
         for (let i = 0; i < options.length; ++i)
@@ -117,7 +117,7 @@ Flickable {
                 }
                 AppButton {
                     text: "Choose folder"
-                    enabled: controller.interactionEnabled
+                    enabled: controller.interactionEnabled && root.prefixDialog !== null
                     onClicked: root.prefixDialog.open()
                 }
             }
