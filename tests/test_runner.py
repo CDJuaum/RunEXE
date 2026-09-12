@@ -5,8 +5,11 @@ from unittest.mock import patch
 from runexe.models import CompatibilityReport, ExecutableInfo
 from runexe.proton import ProtonInstallation
 from runexe.runner import (
+    DOTNET_WINETRICKS_TIMEOUT,
+    WINETRICKS_TIMEOUT,
     PreparedEnvironment,
     build_launch_spec,
+    install_verbs,
     launch,
     open_runtime_configuration,
     prefix_path_for,
@@ -61,6 +64,26 @@ def test_winver_accepts_friendly_and_native_forms(tool, run_progress, tmp_path):
     set_windows_version(tmp_path, "win64", "win10")
 
     assert run_progress.call_args.args[0] == ["winecfg", "-v", "win10"]
+
+
+@patch("runexe.runner.run_with_progress")
+@patch("runexe.runner._require_binary", return_value="/usr/bin/winetricks")
+def test_dotnet_winetricks_uses_extended_timeout(require, run_progress, tmp_path):
+    run_progress.return_value = subprocess.CompletedProcess([], 0)
+
+    install_verbs(tmp_path, ["dotnet472"], wine_arch="win64")
+
+    assert run_progress.call_args.kwargs["timeout"] == DOTNET_WINETRICKS_TIMEOUT
+
+
+@patch("runexe.runner.run_with_progress")
+@patch("runexe.runner._require_binary", return_value="/usr/bin/winetricks")
+def test_regular_winetricks_keeps_standard_timeout(require, run_progress, tmp_path):
+    run_progress.return_value = subprocess.CompletedProcess([], 0)
+
+    install_verbs(tmp_path, ["vcrun2022"], wine_arch="win64")
+
+    assert run_progress.call_args.kwargs["timeout"] == WINETRICKS_TIMEOUT
 
 
 @patch("runexe.runner.subprocess.run")
@@ -178,6 +201,7 @@ def test_builds_launch_spec_for_gui_process(tmp_path):
     assert spec.command == ("wine", str(path.resolve()), "--portable")
     assert spec.cwd == tmp_path
     assert spec.env["WINEPREFIX"] == str(tmp_path / "prefix")
+    assert spec.env["WINEDEBUG"] == "-all,err+all"
 
 
 @patch("runexe.runner.subprocess.Popen")

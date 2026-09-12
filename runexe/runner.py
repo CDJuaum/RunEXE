@@ -30,6 +30,10 @@ PREFIXES_DIR = RUNEXE_DATA_DIR / "prefixes"
 # forever.
 PREFIX_INIT_TIMEOUT = 120
 WINETRICKS_TIMEOUT = 600
+# Classic .NET Framework verbs can chain several Microsoft installers. A clean
+# dotnet472 setup took roughly 18 minutes in the Kali/VMware validation guest,
+# so managed-runtime provisioning needs more headroom than ordinary verbs.
+DOTNET_WINETRICKS_TIMEOUT = 1800
 PROTON_INIT_TIMEOUT = 180
 
 
@@ -134,9 +138,10 @@ def _wine_env(prefix: Path, wine_arch: str) -> dict:
     env = os.environ.copy()
     env["WINEPREFIX"] = str(prefix)
     env["WINEARCH"] = wine_arch
-    # Quiet Wine's own logging; we care about the target app's stderr,
-    # not Wine's internal debug channel noise.
-    env.setdefault("WINEDEBUG", "-all")
+    # Keep actionable Wine errors while suppressing its high-volume trace,
+    # warning, and fixme channels. Runtime diagnostics (for example a missing
+    # CLR host) are otherwise lost and the GUI can only report an exit code.
+    env.setdefault("WINEDEBUG", "-all,err+all")
     return env
 
 
@@ -304,13 +309,18 @@ def install_verbs(
         "--unattended",
         *to_install,
     ]
+    timeout = (
+        DOTNET_WINETRICKS_TIMEOUT
+        if any(verb.casefold().startswith("dotnet") for verb in to_install)
+        else WINETRICKS_TIMEOUT
+    )
 
     try:
         result = run_with_progress(
             command,
             env=env,
             description=(f"Installing dependencies: {', '.join(to_install)}"),
-            timeout=WINETRICKS_TIMEOUT,
+            timeout=timeout,
             verbose=verbose,
         )
 

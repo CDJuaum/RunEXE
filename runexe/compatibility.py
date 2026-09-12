@@ -28,7 +28,7 @@ from runexe.models import (
     ExecutableInfo,
     HostInfo,
 )
-from runexe.profiles import _identity_text, detect_application_profile
+from runexe.profiles import _identity_text, detect_application_profile, is_paint_net_web_installer
 from runexe.resources import extract_requested_execution_level
 
 
@@ -579,6 +579,13 @@ def analyze_compatibility(
     else:
         warnings = []
 
+    if profile is not None and profile.key == "paint-dot-net":
+        warnings.append(
+            "Paint.NET relies on Direct2D and Windows composition APIs with incomplete "
+            "standard Wine support. Paint.NET-on-Wine support is still experimental, so "
+            "the application may need Wine-specific Paint.NET builds or patches after setup."
+        )
+
     # ---------------------------------------------------------
     # Anti-cheat / DRM. EAC and BattlEye can work in Proton when a game
     # publisher enables support, so an import alone is not a hard blocker.
@@ -636,6 +643,24 @@ def analyze_compatibility(
     # ---------------------------------------------------------
 
     dependencies = detect_dependencies(executable.imports or [])
+    if is_paint_net_web_installer(executable):
+        dependencies.append(
+            Dependency(
+                name=".NET Framework 4.7.2 (Paint.NET web installer bootstrapper)",
+                category="runtime",
+                confidence="high",
+                winetricks_verb="dotnet472",
+            )
+        )
+        notes.append(
+            "Paint.NET web installer detected; its embedded SetupDownloader targets "
+            ".NET Framework 4.7.2, which will be provisioned before launch. "
+            "The first-time framework setup can take several minutes."
+        )
+        warnings.append(
+            "The Paint.NET web installer adds a legacy .NET Framework bootstrap step. "
+            "The portable Paint.NET package avoids this installer-specific dependency."
+        )
     graphics = detect_graphics_requirements(executable.imports)
 
     if graphics.apis:

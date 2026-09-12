@@ -65,6 +65,33 @@ def detect_application_profile(executable: ExecutableInfo) -> ApplicationProfile
     return None
 
 
+def is_paint_net_web_installer(executable: ExecutableInfo) -> bool:
+    """Return whether *executable* is Paint.NET's managed web bootstrapper.
+
+    Paint.NET itself ships its modern .NET runtime with the application, but the
+    small ``*.install.anycpu.web.exe`` bootstrapper contains a separate managed
+    downloader that targets .NET Framework 4.7.2.  Keep this deliberately narrow
+    so an installed ``PaintDotNet.exe`` never inherits the bootstrapper runtime.
+    """
+
+    profile = detect_application_profile(executable)
+    if profile is None or profile.key != PAINT_NET.key:
+        return False
+
+    filename = executable.path.name.casefold()
+    if not (".install." in filename and ".web." in filename):
+        return False
+
+    strings = executable.version_info.strings if executable.version_info is not None else {}
+    original_filename = strings.get("OriginalFilename", "").casefold()
+    internal_name = strings.get("InternalName", "").casefold()
+    description = strings.get("FileDescription", "").casefold()
+
+    return (
+        original_filename == "setupsfx.exe" or internal_name == "setupsfx"
+    ) and "paint.net" in description
+
+
 def detect_runtime_issue(
     output: str,
     exit_code: int | None,
@@ -73,6 +100,18 @@ def detect_runtime_issue(
     """Recognize actionable failures from process output or well-known exit codes."""
 
     normalized = " ".join(output.casefold().split())
+    missing_clr = "wine mono is not installed" in normalized or (
+        "clrruntimeinfo_getruntimehost" in normalized and "mscoree" in normalized
+    )
+    if missing_clr:
+        return RuntimeDiagnostic(
+            title="Managed runtime required",
+            message=(
+                "The application could not start its Windows CLR runtime. Enable automatic "
+                "dependencies, prepare the isolated environment again, and retry."
+            ),
+        )
+
     old_windows_message = bool(
         re.search(
             r"windows\s+10.*(?:21h2|windows\s+11).*\brequired\b",

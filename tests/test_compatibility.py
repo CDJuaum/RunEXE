@@ -8,7 +8,7 @@ from runexe.compatibility import (
     dotnet_version_to_verb,
 )
 from runexe.models import ExecutableInfo, HostInfo, PEImport, VersionInfo
-from runexe.profiles import PAINT_NET, detect_runtime_issue
+from runexe.profiles import PAINT_NET, detect_runtime_issue, is_paint_net_web_installer
 
 
 def executable(tmp_path, imports=None, architecture="x86_64"):
@@ -365,9 +365,96 @@ def test_detects_paint_net_and_recommends_modern_windows(tmp_path):
     assert any("21H2" in note for note in report.notes)
 
 
+def test_paint_net_web_installer_provisions_framework_bootstrapper(tmp_path):
+    app = executable(tmp_path)
+    app.path = app.path.with_name("paint.net.5.1.12.install.anycpu.web.exe")
+    app.path.touch()
+    app.version_info = VersionInfo(
+        strings={
+            "ProductName": "paint.net",
+            "FileDescription": "paint.net Setup",
+            "InternalName": "SetupSfx",
+            "OriginalFilename": "SetupSfx.exe",
+        }
+    )
+
+    report = analyze_compatibility(app)
+
+    assert is_paint_net_web_installer(app)
+    assert "dotnet472" in report.required_verbs
+    assert any("4.7.2" in dependency.name for dependency in report.dependencies)
+    assert any("embedded SetupDownloader" in note for note in report.notes)
+    assert any("experimental" in warning for warning in report.warnings)
+    assert any("portable Paint.NET" in warning for warning in report.warnings)
+    assert report.compatibility_score is not None
+    assert report.compatibility_score < 100
+
+
+def test_installed_paint_net_does_not_get_web_installer_framework(tmp_path):
+    app = executable(tmp_path)
+    app.path = app.path.with_name("PaintDotNet.exe")
+    app.path.touch()
+    app.version_info = VersionInfo(strings={"ProductName": "paint.net"})
+
+    report = analyze_compatibility(app)
+
+    assert not is_paint_net_web_installer(app)
+    assert "dotnet472" not in report.required_verbs
+    assert any("experimental" in warning for warning in report.warnings)
+
+
+def test_unrelated_setup_sfx_does_not_get_paint_net_framework(tmp_path):
+    app = executable(tmp_path)
+    app.path = app.path.with_name("vendor.install.anycpu.web.exe")
+    app.path.touch()
+    app.version_info = VersionInfo(
+        strings={
+            "ProductName": "Example Setup",
+            "FileDescription": "Example Setup",
+            "InternalName": "SetupSfx",
+            "OriginalFilename": "SetupSfx.exe",
+        }
+    )
+
+    report = analyze_compatibility(app)
+
+    assert not is_paint_net_web_installer(app)
+    assert "dotnet472" not in report.required_verbs
+
+
+def test_paint_net_offline_installer_does_not_get_web_bootstrapper_framework(tmp_path):
+    app = executable(tmp_path)
+    app.path = app.path.with_name("paint.net.5.1.12.install.x64.exe")
+    app.path.touch()
+    app.version_info = VersionInfo(
+        strings={
+            "ProductName": "paint.net",
+            "FileDescription": "paint.net Setup",
+            "InternalName": "SetupSfx",
+            "OriginalFilename": "SetupSfx.exe",
+        }
+    )
+
+    report = analyze_compatibility(app)
+
+    assert not is_paint_net_web_installer(app)
+    assert "dotnet472" not in report.required_verbs
+
+
 def test_recognizes_paint_net_old_windows_failure():
     diagnostic = detect_runtime_issue("", 1150 % 256, PAINT_NET)
 
     assert diagnostic is not None
     assert diagnostic.recommended_windows_version == "11"
     assert "rejected the Windows version" in diagnostic.message
+
+
+def test_recognizes_missing_wine_clr_runtime():
+    diagnostic = detect_runtime_issue(
+        "err:mscoree:CLRRuntimeInfo_GetRuntimeHost Wine Mono is not installed",
+        255,
+    )
+
+    assert diagnostic is not None
+    assert diagnostic.title == "Managed runtime required"
+    assert "automatic dependencies" in diagnostic.message

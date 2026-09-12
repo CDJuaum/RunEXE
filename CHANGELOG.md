@@ -2,6 +2,22 @@
 
 All notable RunEXE changes are documented here.
 
+## [0.9.3] - 2026-09-13
+
+### Fixed
+
+- Linux desktop completion notifications no longer declare a Qt return type on their
+  signal-connected Python slot. PySide6 6.10.3 could segfault when an application finished and
+  RunEXE emitted the notification signal, which made closing apps such as Notepad++ also kill
+  RunEXE.
+- Paint.NET 5.1 web installers are recognized as managed bootstrap packages and now declare their
+  embedded .NET Framework 4.7.2 dependency instead of reporting no dependencies and 100/100
+  readiness. Heavy `dotnet*` Winetricks provisioning gets a longer timeout for slower VMs.
+- Paint.NET reports the current stock-Wine Direct2D/composition limitation and makes clear that
+  Paint.NET-on-Wine support is still experimental instead of implying full compatibility.
+- Wine launches retain `err:` diagnostics while suppressing noisy trace/warning channels, allowing
+  missing CLR failures to surface as actionable managed-runtime guidance.
+
 ## [0.9.2] - 2026-09-12
 
 ### Fixed

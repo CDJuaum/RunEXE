@@ -4,6 +4,8 @@ import pytest
 
 pytest.importorskip("PySide6")
 
+from PySide6.QtCore import QObject, Signal
+
 from runexe.gui.notifications import DesktopNotifier
 
 
@@ -13,6 +15,10 @@ class FakeWindow:
 
     def isActive(self) -> bool:  # noqa: N802 - mirrors QWindow API
         return self.active
+
+
+class NotificationSender(QObject):
+    requested = Signal(str, str)
 
 
 def test_desktop_notifier_uses_notify_send_when_window_is_inactive(tmp_path, monkeypatch):
@@ -67,3 +73,40 @@ def test_desktop_notifier_is_optional_when_notify_send_is_unavailable(monkeypatc
     notifier = DesktopNotifier(FakeWindow(active=False))
 
     assert not notifier.show("Done", "RunEXE stays usable without libnotify")
+
+
+def test_desktop_notifier_is_safe_when_invoked_through_qt_signal(monkeypatch):
+    calls = []
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setattr(
+        "runexe.gui.notifications.QStandardPaths.findExecutable",
+        lambda name: "/usr/bin/notify-send" if name == "notify-send" else "",
+    )
+    monkeypatch.setattr(
+        "runexe.gui.notifications.QProcess.startDetached",
+        lambda program, arguments: calls.append((program, arguments)) or (True, 42),
+    )
+    sender = NotificationSender()
+    notifier = DesktopNotifier(FakeWindow(active=False))
+    sender.requested.connect(notifier.show)
+
+    sender.requested.emit("Application finished", "Notepad++ exited normally.")
+
+    assert calls == [
+        (
+            "/usr/bin/notify-send",
+            [
+                "--app-name=RunEXE",
+                "Application finished",
+                "Notepad++ exited normally.",
+            ],
+        )
+    ]
+
+
+def test_desktop_notifier_signal_slot_has_no_declared_return_type():
+    meta_object = DesktopNotifier.staticMetaObject
+    method_index = meta_object.indexOfSlot("show(QString,QString)")
+
+    assert method_index >= 0
+    assert meta_object.method(method_index).typeName() == "void"
