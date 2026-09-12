@@ -53,13 +53,22 @@ Item {
                 boundsBehavior: Flickable.StopAtBounds
                 WheelScrollHandler { flickable: activityList }
                 ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                Timer {
+                    id: tailTimer
+                    interval: 0
+                    repeat: false
+                    onTriggered: {
+                        if (activityList.followTail)
+                            activityList.positionAtTail()
+                    }
+                }
                 onContentYChanged: {
                     if (!positioningAtTail && count > 0)
                         followTail = atYEnd
                 }
                 onContentHeightChanged: {
                     if (followTail && !positioningAtTail)
-                        Qt.callLater(positionAtTail)
+                        tailTimer.restart()
                 }
                 function positionAtTail() {
                     positioningAtTail = true
@@ -96,7 +105,7 @@ Item {
                     if (activityList.count === 0) {
                         activityList.followTail = true
                     } else if (activityList.followTail) {
-                        Qt.callLater(activityList.positionAtTail)
+                        tailTimer.restart()
                     }
                 }
             }

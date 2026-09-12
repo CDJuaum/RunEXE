@@ -12,7 +12,7 @@ from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
 from runexe.gui.controller import RunEXEController
-from runexe.gui.qml_app import create_engine
+from runexe.gui.qml_app import _teardown_engine, create_engine
 from runexe.library import ApplicationLibrary
 
 
@@ -31,6 +31,18 @@ def make_shell(qt_app, tmp_path):
     root = engine.rootObjects()[0]
     qt_app.processEvents()
     return controller, engine, root
+
+
+def test_qml_teardown_destroys_engine_before_controller(qt_app, tmp_path):
+    controller, engine, root = make_shell(qt_app, tmp_path)
+    destroyed = []
+    engine.destroyed.connect(lambda: destroyed.append("engine"))
+    controller.destroyed.connect(lambda: destroyed.append("controller"))
+
+    root.close()
+    _teardown_engine(qt_app, engine, controller)
+
+    assert destroyed == ["engine", "controller"]
 
 
 def test_qml_shell_loads_all_seven_pages(qt_app, tmp_path):

@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import QCoreApplication, QEvent, QUrl
 from PySide6.QtGui import QGuiApplication, QIcon
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuickControls2 import QQuickStyle
@@ -39,6 +39,26 @@ def create_engine(controller: RunEXEController) -> QQmlApplicationEngine:
     return engine
 
 
+def _teardown_engine(
+    app: QGuiApplication,
+    engine: QQmlApplicationEngine,
+    controller: RunEXEController,
+) -> None:
+    """Destroy QML before its context controller during application shutdown.
+
+    The controller is exposed as a QML context property but is not owned by the
+    engine.  Letting Python release both objects implicitly can therefore destroy
+    the controller first, leaving live QML bindings evaluating against ``null``.
+    Explicitly flushing deferred deletion in this order avoids that shutdown race.
+    """
+
+    engine.deleteLater()
+    QCoreApplication.sendPostedEvents(engine, QEvent.Type.DeferredDelete)
+    app.processEvents()
+    controller.deleteLater()
+    QCoreApplication.sendPostedEvents(controller, QEvent.Type.DeferredDelete)
+
+
 def run_gui(initial_file: Path | None = None) -> int:
     """Create the Qt Quick application and display the QML shell."""
 
@@ -63,5 +83,6 @@ def run_gui(initial_file: Path | None = None) -> int:
         try:
             return app.exec()
         finally:
+            _teardown_engine(app, engine, controller)
             _live_engines.clear()
     return 0

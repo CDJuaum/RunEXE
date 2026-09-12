@@ -2,6 +2,16 @@
 
 All notable RunEXE changes are documented here.
 
+## [0.9.1] - 2026-09-12
+
+### Fixed
+
+- The Qt Quick desktop app now tears down its QML engine before releasing the Python
+  controller, preventing a shutdown race that could leave live QML bindings pointing at a
+  destroyed controller and crash the process while closing.
+- Activity tail-follow updates now use a page-owned timer instead of queued callbacks, so
+  pending scroll updates are cancelled safely when the Activity page is unloaded.
+
 ## [0.9.0] - 2026-09-12
 
 ### Added
