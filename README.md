@@ -19,9 +19,10 @@ RunEXE inspects PE executables and AppX/MSIX packages before launch, reports lik
   <img src="assets/runexe-gui.png" alt="RunEXE desktop overview" width="900">
 </p>
 
-The Qt desktop application is the easiest way to use RunEXE. It includes:
+The Qt desktop application follows KDE's desktop layout conventions and keeps the system
+theme. See the [UI design notes](docs/desktop-ui.md). It includes:
 
-- A responsive overview with drag-and-drop file selection and clear readiness cards
+- A compact tabbed workspace with drag-and-drop file selection and clear readiness details
 - Background analysis and environment preparation, so the window stays responsive
 - Automatic Wine/Proton selection with manual overrides when needed
 - One-click isolated environment preparation and native Wine/Proton settings
@@ -30,7 +31,7 @@ The Qt desktop application is the easiest way to use RunEXE. It includes:
 - Managed-environment disk usage, folder access, and guarded cleanup
 - Exportable JSON support reports for troubleshooting
 - Live application output without blocking the interface
-- Smooth wheel/touch scrolling, subtle page and metric transitions, and responsive action layouts
+- System colors and fonts, immediate page changes, and direct touchpad scrolling
 - Compatibility presets that detect known requirements such as Paint.NET's minimum Windows build
 
 Install the optional desktop dependencies and open it with either entry point:

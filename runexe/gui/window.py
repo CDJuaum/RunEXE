@@ -14,26 +14,22 @@ from typing import Any
 
 from PySide6.QtCore import (
     QByteArray,
-    QEasingCurve,
     QProcess,
     QProcessEnvironment,
-    QPropertyAnimation,
     QSettings,
     QSignalBlocker,
     Qt,
     QThreadPool,
     QTimer,
     QUrl,
-    QVariantAnimation,
 )
 from PySide6.QtGui import (
     QAction,
     QCloseEvent,
-    QColor,
     QDesktopServices,
+    QFontDatabase,
     QIcon,
     QKeySequence,
-    QPixmap,
     QShortcut,
 )
 from PySide6.QtWidgets import (
@@ -55,6 +51,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QStackedWidget,
+    QTabBar,
     QVBoxLayout,
     QWidget,
 )
@@ -96,7 +93,7 @@ from runexe.runner import (
     prepare_environment,
 )
 
-from .theme import COLORS, apply_theme
+from .theme import apply_theme
 from .widgets import (
     Card,
     DropZone,
@@ -139,8 +136,12 @@ def _muted(text: str = "") -> QLabel:
 def _section_header(title: str, description: str = "") -> QVBoxLayout:
     layout = QVBoxLayout()
     layout.setSpacing(4)
+    layout.setAlignment(Qt.AlignmentFlag.AlignTop)
     heading = QLabel(title)
     heading.setObjectName("sectionTitle")
+    font = heading.font()
+    font.setPointSizeF(font.pointSizeF() + 1)
+    heading.setFont(font)
     layout.addWidget(heading)
     if description:
         layout.addWidget(_muted(description))
@@ -191,10 +192,8 @@ class RunEXEWindow(QMainWindow):
         self._active_launch_path: Path | None = None
         self._active_launch_preset: LaunchPreset | None = None
         self._application_output: list[str] = []
-        self._page_animation: QVariantAnimation | None = None
-        self._profile_animation: QPropertyAnimation | None = None
 
-        self.setWindowTitle(f"RunEXE {__version__}")
+        self.setWindowTitle("RunEXE")
         self.setMinimumSize(920, 680)
         self.resize(1180, 790)
         if _asset_path().is_file():
@@ -217,78 +216,10 @@ class RunEXEWindow(QMainWindow):
         root = QWidget()
         root.setObjectName("appRoot")
         self.setCentralWidget(root)
-        shell = QHBoxLayout(root)
+        shell = QVBoxLayout(root)
         shell.setContentsMargins(0, 0, 0, 0)
         shell.setSpacing(0)
-        shell.addWidget(self._build_sidebar())
-        shell.addWidget(self._build_workspace(), 1)
-
-    def _build_sidebar(self) -> QWidget:
-        sidebar = QFrame()
-        sidebar.setObjectName("sidebar")
-        sidebar.setFixedWidth(216)
-        layout = QVBoxLayout(sidebar)
-        layout.setContentsMargins(20, 22, 20, 20)
-        layout.setSpacing(10)
-
-        brand = QHBoxLayout()
-        brand.setSpacing(10)
-        logo_label = QLabel()
-        logo_label.setFixedSize(46, 46)
-        if _asset_path().is_file():
-            pixmap = QPixmap(str(_asset_path()))
-            logo_label.setPixmap(
-                pixmap.scaled(
-                    46,
-                    46,
-                    Qt.AspectRatioMode.KeepAspectRatio,
-                    Qt.TransformationMode.SmoothTransformation,
-                )
-            )
-        brand_text = QVBoxLayout()
-        brand_text.setSpacing(0)
-        title = QLabel("RunEXE")
-        title.setObjectName("brandTitle")
-        version = _muted(f"Desktop {__version__}")
-        brand_text.addWidget(title)
-        brand_text.addWidget(version)
-        brand.addWidget(logo_label)
-        brand.addLayout(brand_text)
-        brand.addStretch(1)
-        layout.addLayout(brand)
-        layout.addSpacing(28)
-        workspace_label = QLabel("WORKSPACE")
-        workspace_label.setObjectName("eyebrow")
-        layout.addWidget(workspace_label)
-        layout.addSpacing(4)
-
-        self.nav_buttons: list[QPushButton] = []
-        for index, title_text in enumerate(("Overview", "Runtime setup", "Library", "Activity")):
-            nav = QPushButton(title_text)
-            nav.setProperty("nav", True)
-            nav.setIcon(navigation_icon(index))
-            nav.setCursor(Qt.CursorShape.PointingHandCursor)
-            nav.setCheckable(True)
-            nav.setAccessibleName(f"Open {title_text} page")
-            nav.clicked.connect(lambda _checked=False, page=index: self._show_page(page))
-            layout.addWidget(nav)
-            self.nav_buttons.append(nav)
-        layout.addStretch(1)
-
-        cli_card = Card()
-        cli_layout = QVBoxLayout(cli_card)
-        cli_layout.setContentsMargins(13, 12, 13, 12)
-        cli_layout.setSpacing(5)
-        cli_title = QLabel("Keyboard shortcuts")
-        cli_title.setStyleSheet("font-weight: 650;")
-        cli_layout.addWidget(cli_title)
-        shortcuts = QLabel(
-            "Ctrl + O     Open a file\nCtrl + R     Analyze\nCtrl + Enter     Launch"
-        )
-        shortcuts.setObjectName("shortcutHint")
-        cli_layout.addWidget(shortcuts)
-        layout.addWidget(cli_card)
-        return sidebar
+        shell.addWidget(self._build_workspace())
 
     def _build_workspace(self) -> QWidget:
         workspace = QWidget()
@@ -299,18 +230,42 @@ class RunEXEWindow(QMainWindow):
         header = QFrame()
         header.setObjectName("header")
         header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(30, 22, 30, 15)
-        titles = QVBoxLayout()
-        titles.setSpacing(2)
-        self.page_title = QLabel()
-        self.page_title.setObjectName("pageTitle")
-        self.page_subtitle = _muted()
-        titles.addWidget(self.page_title)
-        titles.addWidget(self.page_subtitle)
-        header_layout.addLayout(titles, 1)
+        header_layout.setContentsMargins(20, 12, 20, 12)
+        header_layout.setSpacing(8)
+        brand = QLabel("RunEXE")
+        brand.setObjectName("brandTitle")
+        brand_font = brand.font()
+        brand_font.setPointSizeF(brand_font.pointSizeF() + 3)
+        brand.setFont(brand_font)
+        header_layout.addWidget(brand)
+        header_layout.addSpacing(16)
+        self.browse_button = _button("Open…")
+        self.browse_button.setToolTip("Open Windows software (Ctrl+O)")
+        self.browse_button.clicked.connect(self.browse_file)
+        self.analyze_button = _button("Analyze")
+        self.analyze_button.setToolTip("Analyze the selected file (Ctrl+R)")
+        self.analyze_button.clicked.connect(self.analyze_selected)
+        header_layout.addWidget(self.browse_button)
+        header_layout.addWidget(self.analyze_button)
+        header_layout.addStretch(1)
         self.header_status = StatusPill("Checking runtimes")
-        header_layout.addWidget(self.header_status, 0, Qt.AlignmentFlag.AlignTop)
+        header_layout.addWidget(self.header_status)
+        header_layout.addSpacing(12)
+        self.launch_button = _button("Launch", primary=True)
+        self.launch_button.setToolTip("Prepare the environment and launch (Ctrl+Enter)")
+        self.launch_button.clicked.connect(self.launch_application)
+        header_layout.addWidget(self.launch_button)
         layout.addWidget(header)
+
+        self.navigation = QTabBar()
+        self.navigation.setAccessibleName("Main navigation")
+        self.navigation.setExpanding(False)
+        self.navigation.setDrawBase(False)
+        for index, (title, description) in enumerate(self.PAGE_TITLES):
+            self.navigation.addTab(navigation_icon(index), title)
+            self.navigation.setTabToolTip(index, description)
+        self.navigation.currentChanged.connect(self._show_page)
+        layout.addWidget(self.navigation)
 
         self.progress = QProgressBar()
         self.progress.setRange(0, 0)
@@ -328,7 +283,7 @@ class RunEXEWindow(QMainWindow):
         status = QFrame()
         status.setObjectName("statusBar")
         status_layout = QHBoxLayout(status)
-        status_layout.setContentsMargins(30, 9, 30, 13)
+        status_layout.setContentsMargins(20, 8, 20, 8)
         self.task_status = _muted("Ready")
         self.environment_status = _muted("No application selected")
         self.environment_status.setAlignment(Qt.AlignmentFlag.AlignRight)
@@ -343,8 +298,8 @@ class RunEXEWindow(QMainWindow):
         content.setObjectName("scrollContent")
         content.setAutoFillBackground(True)
         layout = QVBoxLayout(content)
-        layout.setContentsMargins(30, 14, 30, 30)
-        layout.setSpacing(18)
+        layout.setContentsMargins(24, 16, 24, 24)
+        layout.setSpacing(12)
         scroll.setWidget(content)
         return scroll, content, layout
 
@@ -352,57 +307,26 @@ class RunEXEWindow(QMainWindow):
         scroll, _content, layout = self._scroll_page()
         self.overview_scroll = scroll
 
-        hero = Card()
-        hero_layout = QVBoxLayout(hero)
-        hero_layout.setContentsMargins(22, 20, 22, 22)
-        hero_layout.setSpacing(14)
-        heading_row = QHBoxLayout()
-        heading_text = QVBoxLayout()
-        eyebrow = QLabel("WINDOWS APPS. YOUR LINUX DESKTOP.")
-        eyebrow.setObjectName("eyebrow")
-        heading_text.addWidget(eyebrow)
-        hero_title = QLabel("Your next app starts here.")
-        hero_title.setWordWrap(True)
-        hero_title.setObjectName("heroTitle")
-        heading_text.addWidget(hero_title)
-        heading_text.addWidget(_muted("Choose a file. Check compatibility. Make it run."))
-        heading_row.addLayout(heading_text, 1)
-        self.browse_button = _button("Browse files")
-        self.browse_button.clicked.connect(self.browse_file)
-        self.analyze_button = _button("Analyze", primary=True)
-        self.analyze_button.clicked.connect(self.analyze_selected)
-        heading_row.addWidget(self.browse_button)
-        heading_row.addWidget(self.analyze_button)
-        hero_layout.addLayout(heading_row)
-
         self.drop_zone = DropZone()
         self.drop_zone.browse_requested.connect(self.browse_file)
         self.drop_zone.file_selected.connect(lambda path: self.analyze_path(Path(path)))
-        hero_layout.addWidget(self.drop_zone)
-        layout.addWidget(hero)
+        layout.addWidget(self.drop_zone)
 
         self.format_metric = MetricCard("File format")
         self.arch_metric = MetricCard("Architecture")
         self.runtime_metric = MetricCard("Selected runtime")
         self.readiness_metric = MetricCard("Readiness")
-        layout.addWidget(
-            MetricGrid(
-                [
-                    self.format_metric,
-                    self.arch_metric,
-                    self.runtime_metric,
-                    self.readiness_metric,
-                ]
-            )
+        self.overview_metrics = MetricGrid(
+            [self.format_metric, self.arch_metric, self.runtime_metric, self.readiness_metric]
         )
+        layout.addWidget(self.overview_metrics)
 
         details = Card()
         details_layout = QVBoxLayout(details)
-        details_layout.setContentsMargins(20, 18, 20, 20)
+        details_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        details_layout.setContentsMargins(16, 14, 16, 16)
         details_layout.addLayout(
-            _section_header(
-                "Application details", "Information read directly from the package or PE file."
-            )
+            _section_header("Application details", "File and runtime requirements.")
         )
         form = QFormLayout()
         form.setContentsMargins(0, 12, 0, 0)
@@ -420,7 +344,6 @@ class RunEXEWindow(QMainWindow):
         form.addRow("Subsystem", self.detail_subsystem)
         form.addRow("Dependencies", self.detail_dependencies)
         details_layout.addLayout(form)
-        layout.addWidget(details)
 
         self.profile_card = Card()
         self.profile_card.setProperty("recommendation", True)
@@ -444,41 +367,33 @@ class RunEXEWindow(QMainWindow):
 
         compatibility = Card()
         compatibility_layout = QVBoxLayout(compatibility)
-        compatibility_layout.setContentsMargins(20, 18, 20, 20)
+        compatibility_layout.setContentsMargins(16, 14, 16, 16)
         compatibility_layout.addLayout(
             _section_header(
-                "Compatibility guidance",
-                "Blockers, warnings, and useful runtime observations are kept together.",
+                "Compatibility",
+                "Check any warnings before launching.",
             )
         )
         self.guidance_list = QListWidget()
-        self.guidance_list.setMinimumHeight(150)
+        self.guidance_list.setWordWrap(True)
+        self.guidance_list.setMinimumHeight(110)
         self.guidance_list.addItem("Analyze an application to see compatibility guidance.")
         compatibility_layout.addWidget(self.guidance_list)
-        layout.addWidget(compatibility)
 
-        launch_card = Card()
-        launch_layout = QVBoxLayout(launch_card)
-        launch_layout.setContentsMargins(20, 18, 20, 20)
-        launch_layout.addLayout(
-            _section_header(
-                "Ready when you are",
-                "Launch in your app's own Wine or Proton environment.",
-            )
-        )
-        launch_row = QHBoxLayout()
+        self.arguments_card = Card()
+        arguments_layout = QHBoxLayout(self.arguments_card)
+        arguments_layout.setContentsMargins(16, 12, 16, 12)
+        label = QLabel("Arguments:")
         self.arguments_input = QLineEdit()
-        self.arguments_input.setPlaceholderText(
-            'Optional arguments, e.g. --portable "C:\\My Files"'
-        )
+        self.arguments_input.setPlaceholderText("Optional, e.g. --portable")
         self.arguments_input.setAccessibleName("Application launch arguments")
+        label.setBuddy(self.arguments_input)
         self.arguments_input.returnPressed.connect(self.launch_application)
-        self.launch_button = _button("Prepare and launch", accent=True)
-        self.launch_button.clicked.connect(self.launch_application)
-        launch_row.addWidget(self.arguments_input, 1)
-        launch_row.addWidget(self.launch_button)
-        launch_layout.addLayout(launch_row)
-        layout.insertWidget(3, launch_card)
+        arguments_layout.addWidget(label)
+        arguments_layout.addWidget(self.arguments_input, 1)
+        layout.addWidget(self.arguments_card)
+        self.overview_details = MetricGrid([details, compatibility], narrow_columns=1)
+        layout.addWidget(self.overview_details)
         layout.addStretch(1)
         return scroll
 
@@ -503,7 +418,7 @@ class RunEXEWindow(QMainWindow):
 
         strategy = Card()
         strategy_layout = QVBoxLayout(strategy)
-        strategy_layout.setContentsMargins(20, 18, 20, 20)
+        strategy_layout.setContentsMargins(16, 14, 16, 16)
         strategy_layout.addLayout(
             _section_header(
                 "Runtime strategy",
@@ -565,7 +480,7 @@ class RunEXEWindow(QMainWindow):
 
         environment = Card()
         environment_layout = QVBoxLayout(environment)
-        environment_layout.setContentsMargins(20, 18, 20, 20)
+        environment_layout.setContentsMargins(16, 14, 16, 16)
         environment_layout.addLayout(
             _section_header(
                 "Isolated environment",
@@ -592,7 +507,7 @@ class RunEXEWindow(QMainWindow):
 
         actions = Card()
         actions_layout = QVBoxLayout(actions)
-        actions_layout.setContentsMargins(20, 18, 20, 20)
+        actions_layout.setContentsMargins(16, 14, 16, 16)
         actions_layout.addLayout(
             _section_header(
                 "Setup actions",
@@ -641,12 +556,12 @@ class RunEXEWindow(QMainWindow):
 
         recent_card = Card()
         recent_layout = QVBoxLayout(recent_card)
-        recent_layout.setContentsMargins(20, 18, 20, 20)
+        recent_layout.setContentsMargins(16, 14, 16, 16)
         recent_header = QHBoxLayout()
         recent_header.addLayout(
             _section_header(
                 "Application library",
-                "Double-click an entry to restore its backend, Windows version, and arguments.",
+                "Open an application with its saved settings.",
             ),
             1,
         )
@@ -683,11 +598,11 @@ class RunEXEWindow(QMainWindow):
 
         environments_card = Card()
         environments_layout = QVBoxLayout(environments_card)
-        environments_layout.setContentsMargins(20, 18, 20, 20)
+        environments_layout.setContentsMargins(16, 14, 16, 16)
         environments_layout.addLayout(
             _section_header(
                 "Isolated environments",
-                "Inspect disk usage or remove a RunEXE-owned prefix after a clear confirmation.",
+                "Storage used by each application.",
             )
         )
         self.environment_list = QListWidget()
@@ -727,7 +642,7 @@ class RunEXEWindow(QMainWindow):
 
         backups_card = Card()
         backups_layout = QVBoxLayout(backups_card)
-        backups_layout.setContentsMargins(20, 18, 20, 20)
+        backups_layout.setContentsMargins(16, 14, 16, 16)
         backups_layout.addLayout(
             _section_header(
                 "Environment backups",
@@ -755,12 +670,12 @@ class RunEXEWindow(QMainWindow):
     def _build_activity_page(self) -> QWidget:
         page = QWidget()
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(30, 14, 30, 30)
+        layout.setContentsMargins(24, 16, 24, 24)
         layout.setSpacing(14)
         header = QHBoxLayout()
         titles = _section_header(
             "Session activity",
-            "Output is kept in memory for this session and is never uploaded.",
+            "Analysis results and application output for this session.",
         )
         header.addLayout(titles, 1)
         copy_button = _button("Copy")
@@ -774,6 +689,8 @@ class RunEXEWindow(QMainWindow):
         header.addWidget(clear_button)
         layout.addLayout(header)
         self.activity_log = QPlainTextEdit()
+        self.activity_log.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
+        self.activity_log.setAccessibleName("Session activity output")
         self.activity_log.setReadOnly(True)
         self.activity_log.document().setMaximumBlockCount(3000)
         self.activity_log.setPlaceholderText("Analysis and runtime output will appear here.")
@@ -781,6 +698,16 @@ class RunEXEWindow(QMainWindow):
         return page
 
     def _create_shortcuts(self) -> None:
+        QShortcut(
+            QKeySequence("Ctrl+Tab"),
+            self,
+            activated=lambda: self._show_page((self.pages.currentIndex() + 1) % 4),
+        )
+        QShortcut(
+            QKeySequence("Ctrl+Shift+Tab"),
+            self,
+            activated=lambda: self._show_page((self.pages.currentIndex() - 1) % 4),
+        )
         QShortcut(QKeySequence.StandardKey.Open, self, activated=self.browse_file)
         QShortcut(QKeySequence("Ctrl+R"), self, activated=self.analyze_selected)
         QShortcut(QKeySequence("Ctrl+Return"), self, activated=self.launch_application)
@@ -797,26 +724,10 @@ class RunEXEWindow(QMainWindow):
     def _show_page(self, index: int) -> None:
         if not 0 <= index < self.pages.count():
             return
-        changed = self.pages.currentIndex() != index
         self.pages.setCurrentIndex(index)
-        title, subtitle = self.PAGE_TITLES[index]
-        self.page_title.setText(title)
-        self.page_subtitle.setText(subtitle)
-        for button_index, button in enumerate(self.nav_buttons):
-            button.setChecked(button_index == index)
-        if changed:
-            self.pages.update()
-            if self._page_animation is None:
-                self._page_animation = QVariantAnimation(self)
-                self._page_animation.setDuration(180)
-                self._page_animation.setStartValue(QColor(COLORS["cyan"]))
-                self._page_animation.setEndValue(QColor(COLORS["text"]))
-                self._page_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
-                self._page_animation.valueChanged.connect(
-                    lambda color: self.page_title.setStyleSheet(f"color: {color.name()};")
-                )
-            self._page_animation.stop()
-            self._page_animation.start()
+        with QSignalBlocker(self.navigation):
+            self.navigation.setCurrentIndex(index)
+        self.setWindowTitle(f"{self.PAGE_TITLES[index][0]} — RunEXE")
 
     def _restore_settings(self) -> None:
         geometry = self.settings.value("window/geometry")
@@ -881,6 +792,8 @@ class RunEXEWindow(QMainWindow):
         running = self._application_running()
         analyzed = self.executable is not None and self.compatibility is not None
         ready = analyzed and not self.compatibility.blocking_issues
+        for section in (self.overview_metrics, self.arguments_card, self.overview_details):
+            section.setVisible(self.source_path is not None)
         self.progress.setVisible(busy)
         self.browse_button.setEnabled(not blocking_busy and not running)
         self.analyze_button.setEnabled(
@@ -1462,25 +1375,8 @@ class RunEXEWindow(QMainWindow):
         ):
             self._select_combo_data(self.winver_combo, profile.recommended_windows_version)
 
-        was_hidden = self.profile_card.isHidden()
         self.profile_card.show()
         self._update_profile_button()
-        if was_hidden:
-            target_height = self.profile_card.sizeHint().height()
-            if self._profile_animation is None:
-                self._profile_animation = QPropertyAnimation(
-                    self.profile_card, b"maximumHeight", self
-                )
-                self._profile_animation.setDuration(220)
-                self._profile_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
-                self._profile_animation.finished.connect(
-                    lambda: self.profile_card.setMaximumHeight(16777215)
-                )
-            self._profile_animation.stop()
-            self.profile_card.setMaximumHeight(0)
-            self._profile_animation.setStartValue(0)
-            self._profile_animation.setEndValue(target_height)
-            self._profile_animation.start()
 
     def _update_profile_button(self) -> None:
         profile = self.compatibility.profile if self.compatibility is not None else None

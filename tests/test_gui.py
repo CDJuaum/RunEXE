@@ -29,7 +29,7 @@ def test_desktop_shell_has_expandable_pages(qt_app):
     window = RunEXEWindow(auto_refresh=False)
 
     assert window.pages.count() == 4
-    assert [button.text() for button in window.nav_buttons] == [
+    assert [window.navigation.tabText(index) for index in range(4)] == [
         "Overview",
         "Runtime setup",
         "Library",
@@ -37,6 +37,10 @@ def test_desktop_shell_has_expandable_pages(qt_app):
     ]
     assert window.minimumWidth() <= 920
     assert not window.launch_button.isEnabled()
+    assert window.overview_metrics.isHidden()
+    assert window.overview_details.isHidden()
+    assert window.arguments_card.isHidden()
+    assert not window.drop_zone.isHidden()
     assert [action.text() for action in window.environment_configure_menu.actions()] == [
         "Wine settings",
         "Registry editor",
@@ -47,18 +51,90 @@ def test_desktop_shell_has_expandable_pages(qt_app):
     window.deleteLater()
 
 
-def test_navigation_reuses_animation(qt_app):
+def test_navigation_updates_immediately_without_adding_animations(qt_app):
     from PySide6.QtCore import QVariantAnimation
 
     window = RunEXEWindow(auto_refresh=False)
     window._show_page(1)
-    animation = window._page_animation
     count = len(window.findChildren(QVariantAnimation))
     for index in range(100):
-        window._show_page(index % 4)
-    assert window._page_animation is animation
+        window.navigation.setCurrentIndex(index % 4)
+        assert window.pages.currentIndex() == index % 4
     assert len(window.findChildren(QVariantAnimation)) == count
+    assert not window.format_metric.findChildren(QVariantAnimation)
     window.deleteLater()
+
+
+def test_keyboard_navigation_wraps_between_pages(qt_app):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+
+    window = RunEXEWindow(auto_refresh=False)
+    window.show()
+    window.activateWindow()
+    qt_app.processEvents()
+    window.navigation.setFocus()
+    QTest.keyClick(window.navigation, Qt.Key.Key_Tab, Qt.KeyboardModifier.ControlModifier)
+    assert window.pages.currentIndex() == window.navigation.currentIndex() == 1
+    window._show_page(0)
+    QTest.keyClick(
+        window.navigation,
+        Qt.Key.Key_Tab,
+        Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier,
+    )
+    assert window.pages.currentIndex() == window.navigation.currentIndex() == 3
+    window.hide()
+    window.deleteLater()
+
+
+def test_theme_preserves_user_palette_and_font(qt_app):
+    from runexe.gui.theme import apply_theme
+
+    palette, font, stylesheet = qt_app.palette(), qt_app.font(), qt_app.styleSheet()
+    try:
+        apply_theme(qt_app)
+        assert qt_app.palette() == palette
+        assert qt_app.font() == font
+    finally:
+        qt_app.setStyleSheet(stylesheet)
+
+
+def test_touchpad_scroll_applies_pixels_without_waiting_for_animation(qt_app):
+    from PySide6.QtCore import QPoint, QPointF, Qt
+    from PySide6.QtGui import QWheelEvent
+    from PySide6.QtWidgets import QWidget
+
+    scroll = SmoothScrollArea()
+    content = QWidget()
+    content.setMinimumHeight(2000)
+    scroll.setWidget(content)
+    scroll.resize(400, 300)
+    scroll.show()
+    qt_app.processEvents()
+    bar = scroll.verticalScrollBar()
+    bar.setValue(200)
+
+    def wheel(pixels, angle):
+        event = QWheelEvent(
+            QPointF(50, 50),
+            QPointF(50, 50),
+            QPoint(0, pixels),
+            QPoint(0, angle),
+            Qt.MouseButton.NoButton,
+            Qt.KeyboardModifier.NoModifier,
+            Qt.ScrollPhase.ScrollUpdate,
+            False,
+        )
+        QApplication.sendEvent(scroll.viewport(), event)
+
+    wheel(0, -120)  # Begin a mouse-wheel animation, then interrupt it with touchpad input.
+    before = bar.value()
+    wheel(-24, -120)
+    assert bar.value() == before + 24
+    wheel(12, 120)
+    assert bar.value() == before + 12
+    scroll.close()
+    scroll.deleteLater()
 
 
 def test_runtime_refresh_uses_one_installation_snapshot(qt_app, monkeypatch):
@@ -100,6 +176,9 @@ def test_analysis_updates_readiness_and_runtime_state(qt_app, tmp_path):
     assert window.readiness_metric.value.text() == "Blocked"
     assert window.readiness_metric.value.property("metricState") == "error"
     assert not window.launch_button.isEnabled()
+    assert not window.overview_metrics.isHidden()
+    assert not window.overview_details.isHidden()
+    assert not window.arguments_card.isHidden()
     window.deleteLater()
 
 
