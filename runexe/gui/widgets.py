@@ -28,10 +28,12 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QApplication,
+    QComboBox,
     QFrame,
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QListWidget,
     QPushButton,
     QScrollArea,
     QScroller,
@@ -44,11 +46,22 @@ from PySide6.QtWidgets import (
 
 def navigation_icon(kind: int) -> QIcon:
     """Use desktop theme icons with portable Qt fallbacks."""
-    names = ("application-x-executable", "configure", "folder", "utilities-terminal")
+    names = (
+        "application-x-executable",
+        "configure",
+        "computer",
+        "folder",
+        "drive-harddisk",
+        "document-save",
+        "utilities-terminal",
+    )
     fallbacks = (
         QStyle.StandardPixmap.SP_DesktopIcon,
         QStyle.StandardPixmap.SP_ComputerIcon,
+        QStyle.StandardPixmap.SP_DriveHDIcon,
         QStyle.StandardPixmap.SP_DirIcon,
+        QStyle.StandardPixmap.SP_DriveHDIcon,
+        QStyle.StandardPixmap.SP_DialogSaveButton,
         QStyle.StandardPixmap.SP_FileDialogDetailedView,
     )
     return QIcon.fromTheme(names[kind], QApplication.style().standardIcon(fallbacks[kind]))
@@ -67,6 +80,7 @@ class NavigationRail(QFrame):
         self._buttons: list[QPushButton] = []
         self._labels: list[str] = []
         self._tooltips: list[str] = []
+        self._sections: list[QLabel] = []
         self._current_index = -1
         self._compact = False
 
@@ -82,6 +96,13 @@ class NavigationRail(QFrame):
         self._indicator_animation = QPropertyAnimation(self._indicator, b"geometry", self)
         self._indicator_animation.setDuration(140)
         self._indicator_animation.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+    def addSection(self, text: str) -> None:  # noqa: N802 - mirrors the navigation API
+        label = QLabel(text.upper(), self)
+        label.setObjectName("navSection")
+        label.setAccessibleName(text)
+        self._sections.append(label)
+        self._layout.addWidget(label)
 
     def addTab(self, icon: QIcon, text: str) -> int:  # noqa: N802 - mirrors QTabBar's API
         index = len(self._buttons)
@@ -129,6 +150,8 @@ class NavigationRail(QFrame):
         if self._compact == compact:
             return
         self._compact = compact
+        for section in self._sections:
+            section.setVisible(not compact)
         for index, button in enumerate(self._buttons):
             button.setText("" if compact else self._labels[index])
             button.setToolTip(self._tooltips[index] or self._labels[index])
@@ -255,6 +278,7 @@ class SmoothScrollArea(QScrollArea):
         self.setAutoFillBackground(True)
         self.viewport().setObjectName("scrollViewport")
         self.viewport().setAutoFillBackground(True)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.verticalScrollBar().setSingleStep(36)
         self._scroll_target = 0
         self._scroll_animation = QVariantAnimation(self)
@@ -263,7 +287,17 @@ class SmoothScrollArea(QScrollArea):
         self._scroll_animation.valueChanged.connect(
             lambda value: self.verticalScrollBar().setValue(int(value))
         )
+        self.verticalScrollBar().sliderPressed.connect(self._scroll_animation.stop)
+        self.verticalScrollBar().sliderReleased.connect(self._sync_scroll_target)
+        self.verticalScrollBar().actionTriggered.connect(self._scroll_bar_action)
         QScroller.grabGesture(self.viewport(), QScroller.ScrollerGestureType.TouchGesture)
+
+    def _sync_scroll_target(self) -> None:
+        self._scroll_target = self.verticalScrollBar().value()
+
+    def _scroll_bar_action(self, _action: int) -> None:
+        self._scroll_animation.stop()
+        QTimer.singleShot(0, self._sync_scroll_target)
 
     def wheelEvent(self, event: QWheelEvent) -> None:  # noqa: N802 - Qt API
         pixel_delta = event.pixelDelta().y()
@@ -291,6 +325,30 @@ class SmoothScrollArea(QScrollArea):
         self._scroll_animation.setEndValue(self._scroll_target)
         self._scroll_animation.start()
         event.accept()
+
+
+class ScrollSafeComboBox(QComboBox):
+    """Prevent an accidental wheel gesture from changing a collapsed setting."""
+
+    def wheelEvent(self, event: QWheelEvent) -> None:  # noqa: N802 - Qt API
+        if self.view().isVisible():
+            super().wheelEvent(event)
+            return
+        event.ignore()
+
+
+class ScrollHandoffListWidget(QListWidget):
+    """Let a parent page keep scrolling when this list is already at an edge."""
+
+    def wheelEvent(self, event: QWheelEvent) -> None:  # noqa: N802 - Qt API
+        delta = event.pixelDelta().y() or event.angleDelta().y()
+        bar = self.verticalScrollBar()
+        at_top = bar.value() <= bar.minimum() and delta > 0
+        at_bottom = bar.value() >= bar.maximum() and delta < 0
+        if delta and (at_top or at_bottom):
+            event.ignore()
+            return
+        super().wheelEvent(event)
 
 
 class Card(QFrame):

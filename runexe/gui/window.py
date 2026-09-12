@@ -42,7 +42,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QListWidget,
     QListWidgetItem,
     QMainWindow,
     QMenu,
@@ -101,6 +100,8 @@ from .widgets import (
     MetricCard,
     MetricGrid,
     NavigationRail,
+    ScrollHandoffListWidget,
+    ScrollSafeComboBox,
     SmoothScrollArea,
     StatusPill,
     navigation_icon,
@@ -163,10 +164,27 @@ def _button(text: str, *, primary: bool = False, accent: bool = False) -> QPushB
 class RunEXEWindow(QMainWindow):
     """Responsive desktop shell around RunEXE's analysis and runtime services."""
 
+    PAGE_OVERVIEW = 0
+    PAGE_LAUNCH_SETUP = 1
+    PAGE_RUNTIMES = 2
+    PAGE_APPLICATIONS = 3
+    PAGE_ENVIRONMENTS = 4
+    PAGE_BACKUPS = 5
+    PAGE_ACTIVITY = 6
+
     PAGE_TITLES = (
         ("Overview", "Inspect an application and launch it with a clear compatibility plan."),
-        ("Runtime setup", "Choose, prepare, and configure isolated Wine or Proton environments."),
-        ("Library", "Reopen recent software and manage RunEXE's isolated environments."),
+        (
+            "Launch setup",
+            "Choose how the selected application should run and prepare its environment.",
+        ),
+        ("Runtimes", "Inspect and manage Wine, Proton, Winetricks, Vulkan, and GPU readiness."),
+        ("Applications", "Reopen recent software with its saved launch settings."),
+        (
+            "Environments",
+            "Inspect, configure, back up, and remove isolated application environments.",
+        ),
+        ("Backups", "Restore or remove saved environment snapshots."),
         ("Activity", "Review analysis, preparation, launch output, and errors."),
     )
 
@@ -204,7 +222,7 @@ class RunEXEWindow(QMainWindow):
         self._build_ui()
         self._create_shortcuts()
         self._restore_settings()
-        self._show_page(0)
+        self._show_page(self.PAGE_OVERVIEW)
         self._update_controls()
 
         if auto_refresh:
@@ -254,7 +272,15 @@ class RunEXEWindow(QMainWindow):
         sidebar_layout.addLayout(brand_row)
 
         self.navigation = NavigationRail()
+        navigation_sections = {
+            self.PAGE_OVERVIEW: "Run",
+            self.PAGE_RUNTIMES: "System",
+            self.PAGE_APPLICATIONS: "Manage",
+            self.PAGE_ACTIVITY: "Support",
+        }
         for index, (title, description) in enumerate(self.PAGE_TITLES):
+            if section := navigation_sections.get(index):
+                self.navigation.addSection(section)
             self.navigation.addTab(navigation_icon(index), title)
             self.navigation.setTabToolTip(index, description)
         self.navigation.currentChanged.connect(self._show_page)
@@ -311,8 +337,11 @@ class RunEXEWindow(QMainWindow):
         self.pages = AnimatedStackedWidget()
         self.pages.setAutoFillBackground(True)
         self.pages.addWidget(self._build_overview_page())
-        self.pages.addWidget(self._build_runtime_page())
-        self.pages.addWidget(self._build_library_page())
+        self.pages.addWidget(self._build_launch_setup_page())
+        self.pages.addWidget(self._build_runtimes_page())
+        self.pages.addWidget(self._build_applications_page())
+        self.pages.addWidget(self._build_environments_page())
+        self.pages.addWidget(self._build_backups_page())
         self.pages.addWidget(self._build_activity_page())
         content_layout.addWidget(self.pages, 1)
 
@@ -331,9 +360,11 @@ class RunEXEWindow(QMainWindow):
 
     def _scroll_page(self) -> tuple[SmoothScrollArea, QWidget, QVBoxLayout]:
         scroll = SmoothScrollArea()
+        scroll.setAlignment(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignTop)
         content = QWidget()
         content.setObjectName("scrollContent")
         content.setAutoFillBackground(True)
+        content.setMaximumWidth(1800)
         layout = QVBoxLayout(content)
         layout.setContentsMargins(24, 16, 24, 24)
         layout.setSpacing(12)
@@ -411,8 +442,9 @@ class RunEXEWindow(QMainWindow):
                 "Check any warnings before launching.",
             )
         )
-        self.guidance_list = QListWidget()
+        self.guidance_list = ScrollHandoffListWidget()
         self.guidance_list.setWordWrap(True)
+        self.guidance_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.guidance_list.setMinimumHeight(110)
         self.guidance_list.addItem("Analyze an application to see compatibility guidance.")
         compatibility_layout.addWidget(self.guidance_list)
@@ -434,24 +466,9 @@ class RunEXEWindow(QMainWindow):
         layout.addStretch(1)
         return scroll
 
-    def _build_runtime_page(self) -> QWidget:
+    def _build_launch_setup_page(self) -> QWidget:
         scroll, _content, layout = self._scroll_page()
         self.runtime_scroll = scroll
-
-        self.wine_metric = MetricCard("Wine")
-        self.proton_metric = MetricCard("Proton")
-        self.winetricks_metric = MetricCard("Winetricks")
-        self.vulkan_metric = MetricCard("Vulkan / GPU")
-        layout.addWidget(
-            MetricGrid(
-                [
-                    self.wine_metric,
-                    self.proton_metric,
-                    self.winetricks_metric,
-                    self.vulkan_metric,
-                ]
-            )
-        )
 
         strategy = Card()
         strategy_layout = QVBoxLayout(strategy)
@@ -467,15 +484,15 @@ class RunEXEWindow(QMainWindow):
         form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
         form.setHorizontalSpacing(24)
         form.setVerticalSpacing(12)
-        self.backend_combo = QComboBox()
+        self.backend_combo = ScrollSafeComboBox()
         self.backend_combo.addItem("Automatic (recommended)", "auto")
         self.backend_combo.addItem("Wine", "wine")
         self.backend_combo.addItem("Proton", "proton")
         self.backend_combo.currentIndexChanged.connect(self.runtime_options_changed)
-        self.proton_combo = QComboBox()
+        self.proton_combo = ScrollSafeComboBox()
         self.proton_combo.addItem("Best available build", None)
         self.proton_combo.currentIndexChanged.connect(self.runtime_options_changed)
-        self.proton_tuning_combo = QComboBox()
+        self.proton_tuning_combo = ScrollSafeComboBox()
         for preset in PROTON_TUNING_PRESETS:
             self.proton_tuning_combo.addItem(preset.label, preset.key)
             self.proton_tuning_combo.setItemData(
@@ -484,7 +501,7 @@ class RunEXEWindow(QMainWindow):
                 Qt.ItemDataRole.ToolTipRole,
             )
         self.proton_tuning_combo.currentIndexChanged.connect(self._runtime_setting_changed)
-        self.winver_combo = QComboBox()
+        self.winver_combo = ScrollSafeComboBox()
         self.winver_combo.addItem("Runtime default", None)
         for version in ("11", "10", "8.1", "8", "7"):
             self.winver_combo.addItem(f"Windows {version}", version)
@@ -492,7 +509,7 @@ class RunEXEWindow(QMainWindow):
         self.winver_combo.setToolTip(
             "Controls the Windows version reported inside this application's isolated environment."
         )
-        self.dependencies_combo = QComboBox()
+        self.dependencies_combo = ScrollSafeComboBox()
         self.dependencies_combo.addItem("Automatic (Wine on / Proton off)", "auto")
         self.dependencies_combo.addItem("Install detected components", "install")
         self.dependencies_combo.addItem("Skip dependency changes", "skip")
@@ -528,10 +545,10 @@ class RunEXEWindow(QMainWindow):
         self.prefix_input = QLineEdit()
         self.prefix_input.setPlaceholderText("Automatic per-application path")
         self.prefix_input.textChanged.connect(self._update_environment_preview)
-        prefix_browse = _button("Choose folder")
-        prefix_browse.clicked.connect(self.browse_prefix)
+        self.prefix_browse_button = _button("Choose folder")
+        self.prefix_browse_button.clicked.connect(self.browse_prefix)
         prefix_row.addWidget(self.prefix_input, 1)
-        prefix_row.addWidget(prefix_browse)
+        prefix_row.addWidget(self.prefix_browse_button)
         environment_layout.addLayout(prefix_row)
         self.environment_preview = _muted(
             "Select and analyze an application to preview its environment."
@@ -557,24 +574,13 @@ class RunEXEWindow(QMainWindow):
         action_grid.setVerticalSpacing(10)
         self.prepare_button = _button("Prepare automatically", primary=True)
         self.prepare_button.clicked.connect(self.prepare_selected_environment)
-        self.install_proton_button = _button("Install Proton")
-        self.install_proton_button.setToolTip("Install or update RunEXE's managed Proton runtime")
-        self.install_proton_button.clicked.connect(self.install_proton)
-        self.install_vulkan_button = _button("Install Vulkan tools")
-        self.install_vulkan_button.setToolTip("Install the Vulkan utilities used for GPU checks")
-        self.install_vulkan_button.clicked.connect(self.install_vulkan_tools)
         self.wine_config_button = _button("Open Wine settings")
         self.wine_config_button.clicked.connect(lambda: self.open_runtime_settings("wine"))
         self.proton_config_button = _button("Open Proton settings")
         self.proton_config_button.clicked.connect(lambda: self.open_runtime_settings("proton"))
-        self.refresh_button = _button("Refresh detection")
-        self.refresh_button.clicked.connect(self.refresh_runtimes)
-        action_grid.addWidget(self.prepare_button, 0, 0)
-        action_grid.addWidget(self.refresh_button, 0, 1)
-        action_grid.addWidget(self.install_proton_button, 1, 0)
-        action_grid.addWidget(self.install_vulkan_button, 1, 1)
-        action_grid.addWidget(self.wine_config_button, 2, 0)
-        action_grid.addWidget(self.proton_config_button, 2, 1)
+        action_grid.addWidget(self.prepare_button, 0, 0, 1, 2)
+        action_grid.addWidget(self.wine_config_button, 1, 0)
+        action_grid.addWidget(self.proton_config_button, 1, 1)
         action_grid.setColumnStretch(0, 1)
         action_grid.setColumnStretch(1, 1)
         actions_layout.addLayout(action_grid)
@@ -582,22 +588,64 @@ class RunEXEWindow(QMainWindow):
         layout.addStretch(1)
         return scroll
 
-    def _build_library_page(self) -> QWidget:
+    def _build_runtimes_page(self) -> QWidget:
         scroll, _content, layout = self._scroll_page()
-        self.library_scroll = scroll
+        self.system_scroll = scroll
 
-        summary_grid = QGridLayout()
-        summary_grid.setHorizontalSpacing(12)
+        self.wine_metric = MetricCard("Wine")
+        self.proton_metric = MetricCard("Proton")
+        self.winetricks_metric = MetricCard("Winetricks")
+        self.vulkan_metric = MetricCard("Vulkan / GPU")
+        layout.addWidget(
+            MetricGrid(
+                [
+                    self.wine_metric,
+                    self.proton_metric,
+                    self.winetricks_metric,
+                    self.vulkan_metric,
+                ]
+            )
+        )
+
+        management = Card()
+        management_layout = QVBoxLayout(management)
+        management_layout.setContentsMargins(16, 14, 16, 16)
+        management_layout.addLayout(
+            _section_header(
+                "Runtime management",
+                "Install optional host tools or refresh RunEXE's runtime and graphics detection.",
+            )
+        )
+        action_grid = QGridLayout()
+        action_grid.setHorizontalSpacing(10)
+        action_grid.setVerticalSpacing(10)
+        self.refresh_button = _button("Refresh detection", primary=True)
+        self.refresh_button.clicked.connect(self.refresh_runtimes)
+        self.install_proton_button = _button("Install Proton")
+        self.install_proton_button.setToolTip("Install or update RunEXE's managed Proton runtime")
+        self.install_proton_button.clicked.connect(self.install_proton)
+        self.install_vulkan_button = _button("Install Vulkan tools")
+        self.install_vulkan_button.setToolTip("Install the Vulkan utilities used for GPU checks")
+        self.install_vulkan_button.clicked.connect(self.install_vulkan_tools)
+        action_grid.addWidget(self.refresh_button, 0, 0, 1, 2)
+        action_grid.addWidget(self.install_proton_button, 1, 0)
+        action_grid.addWidget(self.install_vulkan_button, 1, 1)
+        action_grid.setColumnStretch(0, 1)
+        action_grid.setColumnStretch(1, 1)
+        management_layout.addLayout(action_grid)
+        layout.addWidget(management)
+        layout.addStretch(1)
+        return scroll
+
+    def _build_applications_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(24, 16, 24, 24)
+        layout.setSpacing(12)
+        self.library_scroll = None
+
         self.library_apps_metric = MetricCard("Recent applications")
-        self.library_storage_metric = MetricCard("Managed storage")
-        self.library_backup_metric = MetricCard("Backups")
-        summary_grid.addWidget(self.library_apps_metric, 0, 0)
-        summary_grid.addWidget(self.library_storage_metric, 0, 1)
-        summary_grid.addWidget(self.library_backup_metric, 0, 2)
-        summary_grid.setColumnStretch(0, 1)
-        summary_grid.setColumnStretch(1, 1)
-        summary_grid.setColumnStretch(2, 1)
-        layout.addLayout(summary_grid)
+        layout.addWidget(MetricGrid([self.library_apps_metric]))
 
         recent_card = Card()
         recent_layout = QVBoxLayout(recent_card)
@@ -622,8 +670,11 @@ class RunEXEWindow(QMainWindow):
         recent_layout.addWidget(self.library_search)
         self.library_empty = _muted("Your recent applications will appear here after analysis.")
         recent_layout.addWidget(self.library_empty)
-        self.recent_list = QListWidget()
-        self.recent_list.setMinimumHeight(190)
+        self.recent_list = ScrollHandoffListWidget()
+        self.recent_list.setMinimumHeight(240)
+        self.recent_list.setUniformItemSizes(True)
+        self.recent_list.setWordWrap(True)
+        self.recent_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.recent_list.itemDoubleClicked.connect(lambda _item: self.open_recent_application())
         self.recent_list.itemSelectionChanged.connect(self._update_library_actions)
         recent_layout.addWidget(self.recent_list)
@@ -639,23 +690,44 @@ class RunEXEWindow(QMainWindow):
         recent_actions.addStretch(1)
         recent_actions.addWidget(self.recent_prune_button)
         recent_layout.addLayout(recent_actions)
-        layout.addWidget(recent_card)
+        layout.addWidget(recent_card, 1)
+        return page
+
+    def _build_environments_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(24, 16, 24, 24)
+        layout.setSpacing(12)
+
+        self.library_storage_metric = MetricCard("Managed storage")
+        layout.addWidget(MetricGrid([self.library_storage_metric]))
 
         environments_card = Card()
         environments_layout = QVBoxLayout(environments_card)
         environments_layout.setContentsMargins(16, 14, 16, 16)
-        environments_layout.addLayout(
+        environments_header = QHBoxLayout()
+        environments_header.addLayout(
             _section_header(
                 "Isolated environments",
                 "Storage used by each application.",
-            )
+            ),
+            1,
         )
-        self.environment_list = QListWidget()
-        self.environment_list.setMinimumHeight(190)
+        self.environment_refresh_button = _button("Refresh")
+        self.environment_refresh_button.clicked.connect(self.refresh_library)
+        environments_header.addWidget(self.environment_refresh_button)
+        environments_layout.addLayout(environments_header)
+        self.environment_list = ScrollHandoffListWidget()
+        self.environment_list.setMinimumHeight(240)
+        self.environment_list.setUniformItemSizes(True)
+        self.environment_list.setWordWrap(True)
+        self.environment_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.environment_list.itemDoubleClicked.connect(
             lambda _item: self.open_environment_folder()
         )
         self.environment_list.itemSelectionChanged.connect(self._update_library_actions)
+        self.environment_empty = _muted("No managed environments have been created yet.")
+        environments_layout.addWidget(self.environment_empty)
         environments_layout.addWidget(self.environment_list)
         environment_actions = QHBoxLayout()
         self.environment_open_button = _button("Open folder")
@@ -683,20 +755,41 @@ class RunEXEWindow(QMainWindow):
         environment_actions.addWidget(self.environment_remove_button)
         environment_actions.addStretch(1)
         environments_layout.addLayout(environment_actions)
-        layout.addWidget(environments_card)
+        layout.addWidget(environments_card, 1)
+        return page
+
+    def _build_backups_page(self) -> QWidget:
+        page = QWidget()
+        layout = QVBoxLayout(page)
+        layout.setContentsMargins(24, 16, 24, 24)
+        layout.setSpacing(12)
+
+        self.library_backup_metric = MetricCard("Backups")
+        layout.addWidget(MetricGrid([self.library_backup_metric]))
 
         backups_card = Card()
         backups_layout = QVBoxLayout(backups_card)
         backups_layout.setContentsMargins(16, 14, 16, 16)
-        backups_layout.addLayout(
+        backups_header = QHBoxLayout()
+        backups_header.addLayout(
             _section_header(
                 "Environment backups",
                 "Restore a removed prefix without overwriting an existing environment.",
-            )
+            ),
+            1,
         )
-        self.backup_list = QListWidget()
-        self.backup_list.setMinimumHeight(150)
+        self.backup_refresh_button = _button("Refresh")
+        self.backup_refresh_button.clicked.connect(self.refresh_library)
+        backups_header.addWidget(self.backup_refresh_button)
+        backups_layout.addLayout(backups_header)
+        self.backup_list = ScrollHandoffListWidget()
+        self.backup_list.setMinimumHeight(240)
+        self.backup_list.setUniformItemSizes(True)
+        self.backup_list.setWordWrap(True)
+        self.backup_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self.backup_list.itemSelectionChanged.connect(self._update_library_actions)
+        self.backup_empty = _muted("No environment backups are available yet.")
+        backups_layout.addWidget(self.backup_empty)
         backups_layout.addWidget(self.backup_list)
         backup_actions = QHBoxLayout()
         self.backup_restore_button = _button("Restore backup", primary=True)
@@ -708,9 +801,8 @@ class RunEXEWindow(QMainWindow):
         backup_actions.addWidget(self.backup_remove_button)
         backup_actions.addStretch(1)
         backups_layout.addLayout(backup_actions)
-        layout.addWidget(backups_card)
-        layout.addStretch(1)
-        return scroll
+        layout.addWidget(backups_card, 1)
+        return page
 
     def _build_activity_page(self) -> QWidget:
         page = QWidget()
@@ -746,24 +838,29 @@ class RunEXEWindow(QMainWindow):
         QShortcut(
             QKeySequence("Ctrl+Tab"),
             self,
-            activated=lambda: self._show_page((self.pages.currentIndex() + 1) % 4),
+            activated=lambda: self._cycle_page(1),
         )
         QShortcut(
             QKeySequence("Ctrl+Shift+Tab"),
             self,
-            activated=lambda: self._show_page((self.pages.currentIndex() - 1) % 4),
+            activated=lambda: self._cycle_page(-1),
         )
         QShortcut(QKeySequence.StandardKey.Open, self, activated=self.browse_file)
         QShortcut(QKeySequence("Ctrl+R"), self, activated=self.analyze_selected)
         QShortcut(QKeySequence("Ctrl+Return"), self, activated=self.launch_application)
         activity_action = QAction("Show activity", self)
         activity_action.setShortcut(QKeySequence("Ctrl+L"))
-        activity_action.triggered.connect(lambda: self._show_page(3))
+        activity_action.triggered.connect(lambda: self._show_page(self.PAGE_ACTIVITY))
         self.addAction(activity_action)
-        library_action = QAction("Show library", self)
-        library_action.setShortcut(QKeySequence("Ctrl+Shift+L"))
-        library_action.triggered.connect(lambda: self._show_page(2))
-        self.addAction(library_action)
+        applications_action = QAction("Show applications", self)
+        applications_action.setShortcut(QKeySequence("Ctrl+Shift+L"))
+        applications_action.triggered.connect(lambda: self._show_page(self.PAGE_APPLICATIONS))
+        self.addAction(applications_action)
+
+    def _cycle_page(self, offset: int) -> None:
+        count = self.pages.count()
+        if count:
+            self._show_page((self.pages.currentIndex() + offset) % count)
 
     # ------------------------------------------------------------- State/UI
     def _show_page(self, index: int) -> None:
@@ -844,7 +941,16 @@ class RunEXEWindow(QMainWindow):
     def _update_controls(self) -> None:
         busy = bool(self._workers)
         blocking_busy = any(key != "library" for key in self._workers)
-        library_busy = "library" in self._workers or "remove-environment" in self._workers
+        library_busy = bool(
+            {
+                "library",
+                "remove-environment",
+                "backup-environment",
+                "restore-backup",
+                "remove-backup",
+            }
+            & self._workers.keys()
+        )
         running = self._application_running()
         analyzed = self.executable is not None and self.compatibility is not None
         ready = analyzed and not self.compatibility.blocking_issues
@@ -852,6 +958,7 @@ class RunEXEWindow(QMainWindow):
             section.setVisible(self.source_path is not None)
         self.progress.setVisible(busy)
         self.browse_button.setEnabled(not blocking_busy and not running)
+        self.drop_zone.setEnabled(not blocking_busy and not running)
         self.analyze_button.setEnabled(
             self.drop_zone.path is not None and not blocking_busy and not running
         )
@@ -872,10 +979,26 @@ class RunEXEWindow(QMainWindow):
             and not blocking_busy
             and not running
         )
-        self.proton_combo.setEnabled(bool(self.proton_installations) and not blocking_busy)
+        for control in (
+            self.backend_combo,
+            self.winver_combo,
+            self.dependencies_combo,
+            self.prefix_input,
+            self.prefix_browse_button,
+            self.arguments_input,
+        ):
+            control.setEnabled(not blocking_busy and not running)
+        self.proton_combo.setEnabled(
+            bool(self.proton_installations) and not blocking_busy and not running
+        )
         proton_backend = bool(self.compatibility and self.compatibility.backend == "proton")
-        self.proton_tuning_combo.setEnabled(proton_backend and not blocking_busy)
-        self.library_refresh_button.setEnabled(not library_busy and not running)
+        self.proton_tuning_combo.setEnabled(proton_backend and not blocking_busy and not running)
+        for refresh in (
+            self.library_refresh_button,
+            self.environment_refresh_button,
+            self.backup_refresh_button,
+        ):
+            refresh.setEnabled(not library_busy and not running)
         self._update_library_actions()
         if running:
             self._set_header_status("Application running", "ready")
@@ -1091,6 +1214,9 @@ class RunEXEWindow(QMainWindow):
             )
             self.backup_list.addItem(item)
 
+        self.environment_empty.setVisible(not bundle.environments)
+        self.backup_empty.setVisible(not bundle.backups)
+
         total_size = sum(item.size_bytes for item in bundle.environments)
         existing_apps = sum(record.exists for record in bundle.applications)
         self.library_apps_metric.set_data(
@@ -1201,7 +1327,7 @@ class RunEXEWindow(QMainWindow):
                 "Use Forget entry or Prune missing to remove it from the library.",
             )
             return
-        self._show_page(0)
+        self._show_page(self.PAGE_OVERVIEW)
         self.analyze_path(path)
 
     def forget_recent_application(self) -> None:
@@ -1461,7 +1587,7 @@ class RunEXEWindow(QMainWindow):
         recommended = self.compatibility.profile.recommended_windows_version
         if recommended is not None:
             self._select_combo_data(self.winver_combo, recommended)
-        self._show_page(1)
+        self._show_page(self.PAGE_LAUNCH_SETUP)
         self.runtime_scroll.verticalScrollBar().setValue(0)
         self.task_status.setText(f"Applied the {self.compatibility.profile.name} setup")
 
@@ -1490,6 +1616,7 @@ class RunEXEWindow(QMainWindow):
     # -------------------------------------------------------------- Tasks
     def _start_task(self, key: str, label: str, function, on_result) -> None:
         if key in self._workers:
+            self.task_status.setText(f"{label} is already running")
             return
         worker = Worker(function)
         worker.signals.result.connect(on_result)
@@ -1532,6 +1659,16 @@ class RunEXEWindow(QMainWindow):
             and self.application_process.state() != QProcess.ProcessState.NotRunning
         )
 
+    def _action_blocked(self) -> bool:
+        blocking = [key for key in self._workers if key != "library"]
+        if blocking:
+            self.task_status.setText("Wait for the current task to finish")
+            return True
+        if self._application_running():
+            self.task_status.setText("Close the running application before changing its setup")
+            return True
+        return False
+
     # ------------------------------------------------------------- Actions
     def browse_file(self) -> None:
         start = str(self.source_path.parent if self.source_path else Path.home())
@@ -1545,6 +1682,8 @@ class RunEXEWindow(QMainWindow):
             self.analyze_path(Path(selected))
 
     def browse_prefix(self) -> None:
+        if self._action_blocked():
+            return
         start = self.prefix_input.text().strip() or str(Path.home())
         selected = QFileDialog.getExistingDirectory(self, "Choose environment folder", start)
         if selected:
@@ -1559,6 +1698,7 @@ class RunEXEWindow(QMainWindow):
     def analyze_path(self, path: Path) -> None:
         # Keyboard shortcuts and drops can arrive even when action buttons are disabled.
         if any(key not in {"library", "runtimes"} for key in self._workers):
+            self.task_status.setText("Wait for the current task to finish before analyzing")
             return
         if self._application_running():
             QMessageBox.information(
@@ -1654,6 +1794,8 @@ class RunEXEWindow(QMainWindow):
     def install_proton(self) -> None:
         """Install the latest RunEXE-managed GE-Proton build in the background."""
 
+        if self._action_blocked():
+            return
         self._start_task(
             "install-proton",
             "Installing the latest GE-Proton runtime",
@@ -1670,6 +1812,8 @@ class RunEXEWindow(QMainWindow):
     def install_vulkan_tools(self) -> None:
         """Install this distribution's Vulkan diagnostic package in the background."""
 
+        if self._action_blocked():
+            return
         self._start_task(
             "install-vulkan",
             "Installing Vulkan tools",
@@ -1726,11 +1870,13 @@ class RunEXEWindow(QMainWindow):
     def _require_analysis(self) -> tuple[ExecutableInfo, CompatibilityReport] | None:
         if self.executable is None or self.compatibility is None:
             QMessageBox.information(self, "Select an application", "Analyze an application first.")
-            self._show_page(0)
+            self._show_page(self.PAGE_OVERVIEW)
             return None
         return self.executable, self.compatibility
 
     def prepare_selected_environment(self) -> None:
+        if self._action_blocked():
+            return
         selected = self._require_analysis()
         if selected is None:
             return
@@ -1758,6 +1904,8 @@ class RunEXEWindow(QMainWindow):
         self._set_header_status("Environment ready", "ready")
 
     def open_runtime_settings(self, backend: str) -> None:
+        if self._action_blocked():
+            return
         selected = self._require_analysis()
         if selected is None or self.host is None:
             return
@@ -1785,6 +1933,8 @@ class RunEXEWindow(QMainWindow):
         )
 
     def launch_application(self) -> None:
+        if self._action_blocked():
+            return
         selected = self._require_analysis()
         if selected is None:
             return
@@ -1897,7 +2047,7 @@ class RunEXEWindow(QMainWindow):
             if self.compatibility is not None and self.compatibility.profile is not None:
                 self.profile_summary.setText(diagnostic.message)
                 self.profile_card.show()
-            self._show_page(0)
+            self._show_page(self.PAGE_OVERVIEW)
             QTimer.singleShot(
                 180, lambda: self.overview_scroll.ensureWidgetVisible(self.profile_card, 24, 24)
             )

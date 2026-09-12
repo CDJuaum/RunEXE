@@ -22,7 +22,8 @@ RunEXE inspects PE executables and AppX/MSIX packages before launch, reports lik
 The Qt desktop application follows KDE's desktop layout conventions and keeps the system
 theme. See the [UI design notes](docs/desktop-ui.md). It includes:
 
-- A compact tabbed workspace with drag-and-drop file selection and clear readiness details
+- A responsive sidebar workspace with focused pages for launch setup, runtimes, apps,
+  environments, backups, and activity
 - Background analysis and environment preparation, so the window stays responsive
 - Automatic Wine/Proton selection with manual overrides when needed
 - One-click isolated environment preparation and native Wine/Proton settings
@@ -31,7 +32,8 @@ theme. See the [UI design notes](docs/desktop-ui.md). It includes:
 - Managed-environment disk usage, folder access, and guarded cleanup
 - Exportable JSON support reports for troubleshooting
 - Live application output without blocking the interface
-- System colors and fonts, immediate page changes, and direct touchpad scrolling
+- System colors and fonts, lightweight page transitions, mouse-friendly scrollbars, and
+  direct touchpad scrolling
 - Compatibility presets that detect known requirements such as Paint.NET's minimum Windows build
 
 Install the optional desktop dependencies and open it with either entry point:
@@ -112,7 +114,7 @@ More compatibility data is one of the long-term goals of the project (see [Roadm
 - Python 3.10+
 - [Wine](https://www.winehq.org/), [Proton](https://github.com/ValveSoftware/Proton), or both (`analyze --no-host` needs neither)
 - A preinstalled Proton build is optional; RunEXE can install a managed GE-Proton
-  runtime from Runtime setup or with `runexe proton install`.
+  runtime from Runtimes or with `runexe proton install`.
 - [Winetricks](https://github.com/Winetricks/winetricks) (optional, but needed for automatic dependency installation)
 - [PySide6 Essentials](https://doc.qt.io/qtforpython-6/) (installed automatically with the `gui` extra)
 
@@ -212,7 +214,7 @@ curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/main/uninstall.sh | 
 
 The uninstaller deliberately preserves recent-application history and all
 Wine/Proton environments under `$XDG_DATA_HOME/runexe`. Manage those separately
-from the Library page or with `runexe environments`.
+from the Applications, Environments, and Backups pages or with `runexe environments`.
 
 ### Development installation
 
@@ -451,7 +453,8 @@ runexe version
 ### v0.4.x
 
 - [x] Native Qt desktop interface
-- [x] Responsive overview, runtime setup, and activity pages
+- [x] Responsive overview, launch setup, runtimes, applications, environments, backups,
+  and activity pages
 - [x] Background analysis and environment preparation
 - [x] Automatic Wine and Proton configuration actions
 - [x] Live non-blocking application output

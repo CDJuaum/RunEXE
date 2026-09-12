@@ -115,15 +115,23 @@ def main() -> None:
         window.show()
         app.processEvents()
         selected_page = os.environ.get("RUNEXE_SCREENSHOT_PAGE", "overview")
-        if selected_page == "library":
+        if selected_page in {"applications", "library", "environments", "backups"}:
             window._library_ready(LibraryBundle(window.application_library.records(), []))
-            window._show_page(2)
-        elif selected_page == "runtime":
-            window._show_page(1)
-        elif selected_page == "activity":
-            window._show_page(3)
-        elif selected_page != "overview":
+        page_indices = {
+            "overview": window.PAGE_OVERVIEW,
+            "launch": window.PAGE_LAUNCH_SETUP,
+            "launch-setup": window.PAGE_LAUNCH_SETUP,
+            "runtime": window.PAGE_RUNTIMES,
+            "runtimes": window.PAGE_RUNTIMES,
+            "applications": window.PAGE_APPLICATIONS,
+            "library": window.PAGE_APPLICATIONS,
+            "environments": window.PAGE_ENVIRONMENTS,
+            "backups": window.PAGE_BACKUPS,
+            "activity": window.PAGE_ACTIVITY,
+        }
+        if selected_page not in page_indices:
             raise ValueError(f"Unknown RUNEXE_SCREENSHOT_PAGE: {selected_page}")
+        window._show_page(page_indices[selected_page])
         app.processEvents()
         settle = QEventLoop()
         QTimer.singleShot(260, settle.quit)

@@ -2,6 +2,23 @@
 
 All notable RunEXE changes are documented here.
 
+## Unreleased
+
+### Changed
+
+- The desktop sidebar now separates Launch setup, host Runtimes, Applications,
+  Environments, Backups, and Activity into focused pages instead of combining
+  unrelated management tasks on one long page.
+
+### Fixed
+
+- Mouse scrollbar interaction now cancels smooth-wheel animation immediately,
+  and larger scrollbar handles make dragging practical on desktop displays.
+- Scrolling over a collapsed runtime selector no longer changes the selected
+  backend or Windows/runtime settings accidentally.
+- Keyboard launch shortcuts and direct action handlers respect busy/running
+  state, preventing concurrent environment preparation or provisioning work.
+
 ## [0.7.0] - 2026-09-12
 
 ### Added

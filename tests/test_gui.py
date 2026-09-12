@@ -16,6 +16,7 @@ from runexe.gui.widgets import (
     MetricCard,
     MetricGrid,
     NavigationRail,
+    ScrollSafeComboBox,
     SmoothScrollArea,
 )
 from runexe.gui.window import AnalysisBundle, LibraryBundle, RunEXEWindow
@@ -35,14 +36,19 @@ def qt_app():
 def test_desktop_shell_has_expandable_pages(qt_app):
     window = RunEXEWindow(auto_refresh=False)
 
-    assert window.pages.count() == 4
+    expected_titles = [title for title, _description in window.PAGE_TITLES]
+    assert window.pages.count() == len(window.PAGE_TITLES) == 7
     assert isinstance(window.navigation, NavigationRail)
-    assert [window.navigation.tabText(index) for index in range(4)] == [
+    assert [window.navigation.tabText(index) for index in range(window.pages.count())] == [
         "Overview",
-        "Runtime setup",
-        "Library",
+        "Launch setup",
+        "Runtimes",
+        "Applications",
+        "Environments",
+        "Backups",
         "Activity",
     ]
+    assert expected_titles == [window.navigation.tabText(i) for i in range(window.pages.count())]
     assert window.minimumWidth() <= 920
     assert not window.launch_button.isEnabled()
     assert window.overview_metrics.isHidden()
@@ -65,11 +71,12 @@ def test_navigation_reuses_one_lightweight_page_animation(qt_app):
     from PySide6.QtCore import QVariantAnimation
 
     window = RunEXEWindow(auto_refresh=False)
-    window._show_page(1)
+    window._show_page(window.PAGE_LAUNCH_SETUP)
     count = len(window.findChildren(QVariantAnimation))
+    page_count = window.pages.count()
     for index in range(100):
-        window.navigation.setCurrentIndex(index % 4)
-        assert window.pages.currentIndex() == index % 4
+        window.navigation.setCurrentIndex(index % page_count)
+        assert window.pages.currentIndex() == index % page_count
     assert len(window.findChildren(QVariantAnimation)) == count
     assert not window.format_metric.findChildren(QVariantAnimation)
     window.deleteLater()
@@ -84,8 +91,11 @@ def test_navigation_rail_compacts_without_losing_accessible_labels(qt_app):
     buttons = window.navigation.findChildren(type(window.browse_button), "navButton")
     assert [button.accessibleName() for button in buttons] == [
         "Overview",
-        "Runtime setup",
-        "Library",
+        "Launch setup",
+        "Runtimes",
+        "Applications",
+        "Environments",
+        "Backups",
         "Activity",
     ]
     assert all(not button.text() for button in buttons)
@@ -95,8 +105,11 @@ def test_navigation_rail_compacts_without_losing_accessible_labels(qt_app):
     assert not window.navigation.isCompact()
     assert [button.text() for button in buttons] == [
         "Overview",
-        "Runtime setup",
-        "Library",
+        "Launch setup",
+        "Runtimes",
+        "Applications",
+        "Environments",
+        "Backups",
         "Activity",
     ]
     window.close()
@@ -148,14 +161,15 @@ def test_keyboard_navigation_wraps_between_pages(qt_app):
     qt_app.processEvents()
     window.navigation.setFocus()
     QTest.keyClick(window.navigation, Qt.Key.Key_Tab, Qt.KeyboardModifier.ControlModifier)
-    assert window.pages.currentIndex() == window.navigation.currentIndex() == 1
-    window._show_page(0)
+    assert window.pages.currentIndex() == window.navigation.currentIndex()
+    assert window.pages.currentIndex() == window.PAGE_LAUNCH_SETUP
+    window._show_page(window.PAGE_OVERVIEW)
     QTest.keyClick(
         window.navigation,
         Qt.Key.Key_Tab,
         Qt.KeyboardModifier.ControlModifier | Qt.KeyboardModifier.ShiftModifier,
     )
-    assert window.pages.currentIndex() == window.navigation.currentIndex() == 3
+    assert window.pages.currentIndex() == window.navigation.currentIndex() == window.PAGE_ACTIVITY
     window.hide()
     window.deleteLater()
 
@@ -208,6 +222,106 @@ def test_touchpad_scroll_applies_pixels_without_waiting_for_animation(qt_app):
     assert bar.value() == before + 12
     scroll.close()
     scroll.deleteLater()
+
+
+def test_mouse_scrollbar_actions_interrupt_wheel_animation(qt_app):
+    from PySide6.QtCore import QPoint, QPointF, Qt
+    from PySide6.QtGui import QWheelEvent
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QWidget
+
+    scroll = SmoothScrollArea()
+    content = QWidget()
+    content.setMinimumHeight(2400)
+    scroll.setWidget(content)
+    scroll.resize(420, 320)
+    scroll.show()
+    qt_app.processEvents()
+    bar = scroll.verticalScrollBar()
+
+    wheel = QWheelEvent(
+        QPointF(50, 50),
+        QPointF(50, 50),
+        QPoint(),
+        QPoint(0, -120),
+        Qt.MouseButton.NoButton,
+        Qt.KeyboardModifier.NoModifier,
+        Qt.ScrollPhase.ScrollUpdate,
+        False,
+    )
+    QApplication.sendEvent(scroll.viewport(), wheel)
+    QTest.qWait(25)
+
+    QTest.mouseClick(
+        bar,
+        Qt.MouseButton.LeftButton,
+        pos=QPoint(max(1, bar.width() // 2), max(1, bar.height() - 6)),
+    )
+    manual_value = bar.value()
+    assert manual_value > 0
+    QTest.qWait(220)
+    assert bar.value() == manual_value
+
+    bar.sliderPressed.emit()
+    bar.setValue(50)
+    bar.sliderReleased.emit()
+    QTest.qWait(220)
+    assert bar.value() == 50
+    scroll.close()
+    scroll.deleteLater()
+
+
+def test_collapsed_runtime_combo_does_not_change_on_page_wheel(qt_app):
+    from PySide6.QtCore import QPoint, QPointF, Qt
+    from PySide6.QtGui import QWheelEvent
+
+    combo = ScrollSafeComboBox()
+    combo.addItems(["Automatic", "Wine", "Proton"])
+    combo.setCurrentIndex(0)
+    combo.show()
+    qt_app.processEvents()
+    event = QWheelEvent(
+        QPointF(10, 10),
+        QPointF(10, 10),
+        QPoint(),
+        QPoint(0, -120),
+        Qt.MouseButton.NoButton,
+        Qt.KeyboardModifier.NoModifier,
+        Qt.ScrollPhase.ScrollUpdate,
+        False,
+    )
+
+    QApplication.sendEvent(combo, event)
+
+    assert combo.currentIndex() == 0
+    assert not event.isAccepted()
+    combo.close()
+    combo.deleteLater()
+
+
+def test_launch_shortcut_cannot_bypass_busy_state(qt_app, tmp_path, monkeypatch):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+
+    path = make_pe(tmp_path / "busy.exe", machine=0x8664)
+    executable = analyze_executable(path)
+    host = HostInfo("x86_64", True, "wine-11", True, True, True)
+    report = analyze_compatibility(executable, host)
+    window = RunEXEWindow(auto_refresh=False)
+    window._analysis_ready(AnalysisBundle(path, executable, host, report, []))
+    started = []
+    monkeypatch.setattr(window, "_start_task", lambda *args: started.append(args[0]))
+    window._workers["prepare"] = object()
+    window.show()
+    qt_app.processEvents()
+
+    QTest.keyClick(window, Qt.Key.Key_Return, Qt.KeyboardModifier.ControlModifier)
+
+    assert started == []
+    assert "Wait for the current task" in window.task_status.text()
+    window._workers.clear()
+    window.close()
+    window.deleteLater()
 
 
 def test_runtime_refresh_uses_one_installation_snapshot(qt_app, monkeypatch):
@@ -333,6 +447,8 @@ def test_library_search_and_refresh_preserve_selection(qt_app, tmp_path):
     assert window.library_empty.text() == "No applications match your search."
     window.library_search.clear()
     assert window.recent_open_button.isEnabled()
+    assert not window.environment_empty.isHidden()
+    assert not window.backup_empty.isHidden()
     window.deleteLater()
 
 
@@ -389,9 +505,9 @@ def test_paint_net_profile_applies_windows_11_setup(qt_app, tmp_path):
     assert window.apply_profile_button.text() == "Review Windows 11 setup"
     window.apply_profile_button.click()
     qt_app.processEvents()
-    assert window.pages.currentIndex() == 1
-    assert window.pages.widget(0).graphicsEffect() is None
-    assert window.pages.widget(1).graphicsEffect() is None
+    assert window.pages.currentIndex() == window.PAGE_LAUNCH_SETUP
+    assert window.pages.widget(window.PAGE_OVERVIEW).graphicsEffect() is None
+    assert window.pages.widget(window.PAGE_LAUNCH_SETUP).graphicsEffect() is None
     assert window.profile_card.graphicsEffect() is None
     assert window.runtime_scroll.viewport().autoFillBackground()
     assert window.winver_combo.view().viewport().autoFillBackground()

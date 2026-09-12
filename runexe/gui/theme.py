@@ -16,6 +16,8 @@ def apply_theme(app: QApplication) -> None:
     sidebar = "#202328" if dark else "#f5f6f7"
     hover = "#2d3238" if dark else "#e9ecef"
     pressed = "#353b42" if dark else "#dfe3e7"
+    scroll_handle = "#616870" if dark else "#aeb4ba"
+    scroll_hover = "#7b838c" if dark else "#8f979f"
     success = "#8bd5a0" if dark else "#246b38"
     warning = "#f0c477" if dark else "#865b09"
     error = "#f59999" if dark else "#b52b35"
@@ -29,6 +31,12 @@ def apply_theme(app: QApplication) -> None:
         QFrame#header {{ border-bottom: 1px solid {soft_border}; }}
         QFrame#statusBar {{ border-top: 1px solid {soft_border}; }}
         QFrame#navigationRail {{ background: transparent; border: none; }}
+        QLabel#navSection {{
+            color: {muted};
+            font-size: 9pt;
+            font-weight: 600;
+            padding: 8px 10px 2px 10px;
+        }}
         QFrame#navIndicator {{
             background: palette(highlight);
             border: none;
@@ -100,6 +108,38 @@ def apply_theme(app: QApplication) -> None:
         }}
         QLineEdit:focus, QComboBox:focus {{ border-color: palette(highlight); }}
         QScrollArea {{ border: none; background: transparent; }}
+        QScrollBar:vertical {{
+            width: 12px;
+            margin: 3px 2px 3px 2px;
+            background: transparent;
+        }}
+        QScrollBar::handle:vertical {{
+            min-height: 40px;
+            background: {scroll_handle};
+            border-radius: 4px;
+        }}
+        QScrollBar::handle:vertical:hover,
+        QScrollBar::handle:vertical:pressed {{ background: {scroll_hover}; }}
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+        QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+            background: transparent;
+        }}
+        QScrollBar:horizontal {{
+            height: 12px;
+            margin: 2px 3px 2px 3px;
+            background: transparent;
+        }}
+        QScrollBar::handle:horizontal {{
+            min-width: 40px;
+            background: {scroll_handle};
+            border-radius: 4px;
+        }}
+        QScrollBar::handle:horizontal:hover,
+        QScrollBar::handle:horizontal:pressed {{ background: {scroll_hover}; }}
+        QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{ width: 0; }}
+        QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {{
+            background: transparent;
+        }}
         QListWidget {{
             background: palette(base);
             border: 1px solid {border};
