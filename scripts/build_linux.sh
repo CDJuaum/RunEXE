@@ -25,10 +25,23 @@ case "${1:-}" in
 esac
 
 python -m pytest -q
-python -m PyInstaller --noconfirm --clean --onedir --name runexe \
-  --collect-data runexe --copy-metadata runexe \
-  --distpath build/frozen --workpath build/pyinstaller --specpath build \
-  scripts/frozen_entry.py
+if [ "$1" = glibc ]; then
+  # QtQml's PyInstaller hook collects the installed QML import tree, including
+  # QtQuick.Controls and QtQuick.Dialogs. Keep the Python Qt modules explicit so
+  # the hook runs even though the GUI is imported lazily from the CLI entry point.
+  python -m PyInstaller --noconfirm --clean --onedir --name runexe \
+    --collect-data runexe --copy-metadata runexe \
+    --hidden-import PySide6.QtQml \
+    --hidden-import PySide6.QtQuick \
+    --hidden-import PySide6.QtQuickControls2 \
+    --distpath build/frozen --workpath build/pyinstaller --specpath build \
+    scripts/frozen_entry.py
+else
+  python -m PyInstaller --noconfirm --clean --onedir --name runexe \
+    --collect-data runexe --copy-metadata runexe \
+    --distpath build/frozen --workpath build/pyinstaller --specpath build \
+    scripts/frozen_entry.py
+fi
 python -c 'from pathlib import Path; from tests.helpers import make_pe; make_pe(Path("/tmp/runexe-smoke.exe"))'
 
 # Test outside the source checkout so missing frozen modules cannot be masked.

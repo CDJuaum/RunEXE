@@ -18,7 +18,7 @@ def launch_gui(initial_file: Path | None = None, qt_platform: str | None = None)
     try:
         selected_platform = prepare_qt_environment(qt_platform)
         preflight_qt_platform(selected_platform)
-        from .window import run_gui
+        from .qml_app import run_gui
     except ModuleNotFoundError as error:
         if error.name and error.name.startswith("PySide6"):
             raise GuiUnavailableError(

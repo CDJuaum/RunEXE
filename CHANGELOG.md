@@ -2,18 +2,25 @@
 
 All notable RunEXE changes are documented here.
 
-## Unreleased
+## [0.8.0] - 2026-09-12
 
 ### Changed
 
+- The production desktop frontend now uses Qt Quick/QML with a QObject-backed Python
+  controller. Analysis, launch, runtime provisioning, application management, environment
+  backups, and process handling continue to use the same backend services as the CLI.
+- Desktop pages now use Qt Quick Flickable/ListView controls, responsive layouts, native
+  scrollbars, system-palette-aware styling, and lightweight scene-graph transitions.
 - The desktop sidebar now separates Launch setup, host Runtimes, Applications,
   Environments, Backups, and Activity into focused pages instead of combining
   unrelated management tasks on one long page.
 
 ### Fixed
 
-- Mouse scrollbar interaction now cancels smooth-wheel animation immediately,
-  and larger scrollbar handles make dragging practical on desktop displays.
+- Live activity output now uses a bounded append-only QML list model instead of rebuilding
+  the entire log string every time an application writes output.
+- Desktop scrolling now uses Qt Quick's native Flickable/ListView behavior with
+  draggable scrollbars, avoiding the custom wheel-animation path used by the old frontend.
 - Scrolling over a collapsed runtime selector no longer changes the selected
   backend or Windows/runtime settings accidentally.
 - Keyboard launch shortcuts and direct action handlers respect busy/running

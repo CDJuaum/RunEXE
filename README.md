@@ -19,8 +19,8 @@ RunEXE inspects PE executables and AppX/MSIX packages before launch, reports lik
   <img src="assets/runexe-gui.png" alt="RunEXE desktop overview" width="900">
 </p>
 
-The Qt desktop application follows KDE's desktop layout conventions and keeps the system
-theme. See the [UI design notes](docs/desktop-ui.md). It includes:
+The Qt Quick/QML desktop application follows KDE's desktop layout conventions with a focused,
+responsive RunEXE theme. See the [UI design notes](docs/desktop-ui.md). It includes:
 
 - A responsive sidebar workspace with focused pages for launch setup, runtimes, apps,
   environments, backups, and activity
@@ -32,8 +32,8 @@ theme. See the [UI design notes](docs/desktop-ui.md). It includes:
 - Managed-environment disk usage, folder access, and guarded cleanup
 - Exportable JSON support reports for troubleshooting
 - Live application output without blocking the interface
-- System colors and fonts, lightweight page transitions, mouse-friendly scrollbars, and
-  direct touchpad scrolling
+- Consistent desktop colors and fonts, lightweight page transitions, mouse-friendly
+  scrollbars, and direct touchpad scrolling
 - Compatibility presets that detect known requirements such as Paint.NET's minimum Windows build
 
 Install the optional desktop dependencies and open it with either entry point:
@@ -93,7 +93,7 @@ More compatibility data is one of the long-term goals of the project (see [Roadm
 - **Winetricks integration** - installs required runtimes (VC++ redistributables, D3D compiler/extension libs, OpenAL, .NET Framework) before launch
 - **Native Wine execution** - launches from the application directory and preserves arguments, stdout, stderr, timeouts, and exit codes
 - **Polished terminal UI** - readable launch plans, compact tables, clear status language, and a terminal mark derived from the project logo
-- **Scalable desktop GUI** - responsive Qt layouts, drag and drop, runtime configuration, live logs, persistent preferences, and background tasks
+- **Scalable desktop GUI** - responsive Qt Quick/QML layouts, drag and drop, runtime configuration, live logs, persistent preferences, and background tasks
 - **Application library** - reopens recent software and restores its last launch choices without sharing custom prefixes between apps
 - **Environment manager** - inventories RunEXE-owned Wine/Proton environments, reports disk use, opens their folders, and removes only validated managed paths
 - **Support report export** - saves the current analysis, compatibility decision, host state, launch preset, environment inventory, and activity log as JSON
@@ -159,7 +159,9 @@ uploading workflow artifacts without creating or changing a GitHub release.
 
 Build logic lives in `scripts/build_linux.sh` and `scripts/package_linux.py`.
 The desktop baseline is Ubuntu 22.04 (glibc 2.35); musl builds use Alpine 3.22.
-Builds use PyInstaller 6.22.2, run the test suite, launch the frozen CLI/GUI away
+The glibc bundle includes the Qt QML, Qt Quick, Qt Quick Controls, and Qt Quick Dialogs
+runtime modules used by the desktop shell. The musl artifact remains CLI-only. Builds use
+PyInstaller 6.22.2, run the test suite, launch the frozen CLI/GUI away
 from the source checkout, and test package installation in Debian 12, Ubuntu
 22.04, Fedora 43, and Alpine 3.22 before release publication.
 

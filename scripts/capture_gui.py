@@ -13,49 +13,26 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-# Use the platform's font and controls. Headless Linux builders can refresh the
-# screenshot with Qt's offscreen backend.
+# Headless Linux builders can refresh the Qt Quick scene through the offscreen
+# platform and software scene graph.
 if sys.platform != "win32" and not os.environ.get("DISPLAY"):
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    os.environ.setdefault("QT_QUICK_BACKEND", "software")
 
 from PySide6.QtCore import QEventLoop, QSettings, QTimer
-from PySide6.QtGui import QColor, QPalette
-from PySide6.QtWidgets import QApplication
+from PySide6.QtGui import QGuiApplication
+from PySide6.QtQuickControls2 import QQuickStyle
 
-from runexe.gui.theme import apply_theme
-from runexe.gui.window import AnalysisBundle, LibraryBundle, RunEXEWindow
+from runexe.gui.controller import AnalysisBundle, LibraryBundle, RunEXEController
+from runexe.gui.qml_app import create_engine
 from runexe.library import ApplicationLibrary
 from runexe.models import CompatibilityReport, ExecutableInfo, HostInfo, VersionInfo
 from runexe.proton import ProtonInstallation
 
 
 def main() -> None:
-    app = QApplication.instance() or QApplication([])
-    # Explicit schemes make visual QA repeatable without changing user settings.
-    scheme = os.environ.get("RUNEXE_SCREENSHOT_SCHEME", "system")
-    if scheme in {"light", "dark"}:
-        palette = QPalette()
-        dark = scheme == "dark"
-        for role, light, dark_color in (
-            (QPalette.ColorRole.Window, "#eff0f1", "#202225"),
-            (QPalette.ColorRole.Base, "#ffffff", "#292c30"),
-            (QPalette.ColorRole.AlternateBase, "#e7e9eb", "#33373c"),
-            (QPalette.ColorRole.Button, "#eff0f1", "#34383d"),
-            (QPalette.ColorRole.Text, "#232629", "#eff0f1"),
-            (QPalette.ColorRole.WindowText, "#232629", "#eff0f1"),
-            (QPalette.ColorRole.ButtonText, "#232629", "#eff0f1"),
-            (QPalette.ColorRole.PlaceholderText, "#60666c", "#a9adb2"),
-            (QPalette.ColorRole.Highlight, "#287fac", "#287fac"),
-            (QPalette.ColorRole.HighlightedText, "#ffffff", "#ffffff"),
-        ):
-            palette.setColor(role, QColor(dark_color if dark else light))
-        for role in (QPalette.ColorRole.Text, QPalette.ColorRole.ButtonText):
-            palette.setColor(
-                QPalette.ColorGroup.Disabled, role, QColor("#92979c" if dark else "#74797e")
-            )
-        app.setStyle("Fusion")
-        app.setPalette(palette)
-    apply_theme(app)
+    QQuickStyle.setStyle("Basic")
+    app = QGuiApplication.instance() or QGuiApplication([])
     source = Path.home() / "Downloads" / "Aurora Studio.exe"
     executable = ExecutableInfo(
         source,
@@ -100,38 +77,40 @@ def main() -> None:
     with TemporaryDirectory(prefix="runexe-screenshot-") as temporary:
         QSettings.setDefaultFormat(QSettings.Format.IniFormat)
         QSettings.setPath(QSettings.Format.IniFormat, QSettings.Scope.UserScope, temporary)
-        window = RunEXEWindow(
+        controller = RunEXEController(
             auto_refresh=False,
             application_library=ApplicationLibrary(Path(temporary) / "library.json"),
         )
-        window.resize(
-            int(os.environ.get("RUNEXE_SCREENSHOT_WIDTH", "1180")),
-            int(os.environ.get("RUNEXE_SCREENSHOT_HEIGHT", "790")),
-        )
         if os.environ.get("RUNEXE_SCREENSHOT_EMPTY") != "1":
-            window._analysis_ready(
+            controller._analysis_ready(
                 AnalysisBundle(source, executable, host, compatibility, [proton])
             )
-        window.show()
+        engine = create_engine(controller)
+        roots = engine.rootObjects()
+        if not roots:
+            raise RuntimeError("RunEXE QML screenshot window did not load")
+        window = roots[0]
+        window.setWidth(int(os.environ.get("RUNEXE_SCREENSHOT_WIDTH", "1180")))
+        window.setHeight(int(os.environ.get("RUNEXE_SCREENSHOT_HEIGHT", "790")))
         app.processEvents()
         selected_page = os.environ.get("RUNEXE_SCREENSHOT_PAGE", "overview")
         if selected_page in {"applications", "library", "environments", "backups"}:
-            window._library_ready(LibraryBundle(window.application_library.records(), []))
+            controller._library_ready(LibraryBundle(controller.application_library.records(), []))
         page_indices = {
-            "overview": window.PAGE_OVERVIEW,
-            "launch": window.PAGE_LAUNCH_SETUP,
-            "launch-setup": window.PAGE_LAUNCH_SETUP,
-            "runtime": window.PAGE_RUNTIMES,
-            "runtimes": window.PAGE_RUNTIMES,
-            "applications": window.PAGE_APPLICATIONS,
-            "library": window.PAGE_APPLICATIONS,
-            "environments": window.PAGE_ENVIRONMENTS,
-            "backups": window.PAGE_BACKUPS,
-            "activity": window.PAGE_ACTIVITY,
+            "overview": controller.PAGE_OVERVIEW,
+            "launch": controller.PAGE_LAUNCH_SETUP,
+            "launch-setup": controller.PAGE_LAUNCH_SETUP,
+            "runtime": controller.PAGE_RUNTIMES,
+            "runtimes": controller.PAGE_RUNTIMES,
+            "applications": controller.PAGE_APPLICATIONS,
+            "library": controller.PAGE_APPLICATIONS,
+            "environments": controller.PAGE_ENVIRONMENTS,
+            "backups": controller.PAGE_BACKUPS,
+            "activity": controller.PAGE_ACTIVITY,
         }
         if selected_page not in page_indices:
             raise ValueError(f"Unknown RUNEXE_SCREENSHOT_PAGE: {selected_page}")
-        window._show_page(page_indices[selected_page])
+        controller.navigateRequested.emit(page_indices[selected_page])
         app.processEvents()
         settle = QEventLoop()
         QTimer.singleShot(260, settle.quit)
@@ -143,10 +122,11 @@ def main() -> None:
             else Path(__file__).resolve().parent.parent / "assets" / "runexe-gui.png"
         )
         target.parent.mkdir(parents=True, exist_ok=True)
-        if not window.grab().save(str(target), "PNG"):
+        if not window.grabWindow().save(str(target), "PNG"):
             raise RuntimeError(f"Could not save GUI screenshot to {target}")
         print(target)
         window.close()
+        engine.deleteLater()
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-"""Qt bootstrap that runs before importing any Qt widget modules."""
+"""Qt bootstrap that runs before importing any Qt GUI modules."""
 
 from __future__ import annotations
 

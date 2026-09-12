@@ -1,10 +1,13 @@
 import re
 import sys
 import tarfile
+from pathlib import Path
 
 import pytest
 
 from scripts import frozen_entry, package_linux
+
+ROOT = Path(__file__).resolve().parent.parent
 
 
 @pytest.mark.parametrize("tag", ["v0.6.0", "release/test", "$(echo nope)", "../", "x" * 200])
@@ -55,3 +58,23 @@ def test_musl_archive_contains_executable_license_and_provenance(tmp_path, monke
         assert "runexe/LICENSE" in archive.getnames()
         assert "runexe/runexe-gui" not in archive.getnames()
         assert b"Commit: abc123" in archive.extractfile("runexe/BUILD-INFO.txt").read()
+
+
+def test_python_packages_ship_qml_sources():
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    manifest = (ROOT / "MANIFEST.in").read_text(encoding="utf-8")
+    assert '"gui/qml/*.qml"' in pyproject
+    assert '"gui/qml/**/*.qml"' in pyproject
+    assert '"gui/qml/qmldir"' in pyproject
+    assert "recursive-include runexe/gui/qml *.qml qmldir" in manifest
+
+
+def test_glibc_frozen_build_collects_qt_quick_runtime_while_musl_stays_cli_only():
+    script = (ROOT / "scripts/build_linux.sh").read_text(encoding="utf-8")
+    assert "--hidden-import PySide6.QtQml" in script
+    assert "--hidden-import PySide6.QtQuick" in script
+    assert "--hidden-import PySide6.QtQuickControls2" in script
+    assert "QtQuick.Controls and QtQuick.Dialogs" in script
+    assert 'if [ "$1" = glibc ]; then' in script
+    assert "python -m pip install '.[dev]' 'pyinstaller==6.22.2'" in script
+    assert "python -m pip install '.[dev,gui]' 'pyinstaller==6.22.2'" in script

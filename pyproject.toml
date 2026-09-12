@@ -1,6 +1,6 @@
 [project]
 name = "runexe"
-version = "0.7.0"
+version = "0.8.0"
 description = "Analyze and run Windows software on Linux with a desktop GUI or CLI"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -53,7 +53,14 @@ build-backend = "setuptools.build_meta"
 include = ["runexe*"]
 
 [tool.setuptools.package-data]
-runexe = ["assets/*.png", "assets/*.svg"]
+runexe = [
+    "assets/*.png",
+    "assets/*.svg",
+    "gui/qml/*.qml",
+    "gui/qml/**/*.qml",
+    "gui/qml/qmldir",
+    "gui/qml/**/qmldir",
+]
 
 [tool.pytest.ini_options]
 addopts = "-ra"

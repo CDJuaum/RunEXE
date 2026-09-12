@@ -5,3 +5,4 @@ include scripts/build_linux.sh
 include scripts/frozen_entry.py
 include scripts/package_linux.py
 recursive-include assets *.png
+recursive-include runexe/gui/qml *.qml qmldir

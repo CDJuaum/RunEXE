@@ -1,9 +1,9 @@
 # Desktop interface
 
-RunEXE uses a lightweight Qt shell designed to feel at home on a Linux desktop while
-providing clearer hierarchy than a traditional tool window. It keeps the user's desktop
-palette and fonts, uses themed icons with Qt fallbacks, and adds only small structural
-styles and animations on top of native Qt widgets.
+RunEXE uses a lightweight Qt Quick/QML shell designed to feel at home on a Linux desktop
+while providing clearer hierarchy than a traditional tool window. It follows the active
+system palette and platform font stack, uses lightweight built-in navigation glyphs, and keeps
+application state and runtime behavior in the Python controller behind the QML presentation layer.
 
 ## Design rules
 
@@ -12,9 +12,10 @@ styles and animations on top of native Qt widgets.
   while preserving accessible labels and tooltips. Keep Open, Analyze, and Launch in the
   shared page header so the current file remains actionable from every page.
   See [layout and navigation](https://develop.kde.org/hig/layout_and_nav/).
-- Prefer standard Qt controls and themed icons with Qt fallbacks. Keep custom
+- Prefer standard Qt Quick Controls and lightweight built-in glyphs. Keep custom
   styling focused on spacing, rounded surfaces, hierarchy, and semantic status colors.
-  Derive shell colors from the active light/dark palette rather than replacing it.
+  Derive the shell from the active SystemPalette and keep semantic colors centralized in the
+  QML theme singleton.
 - Show the file picker first. Reveal file-specific results and arguments after a
   file is selected. Place details and compatibility side by side when space allows.
   See [simple by default](https://develop.kde.org/hig/simple_by_default/).
@@ -22,12 +23,12 @@ styles and animations on top of native Qt widgets.
   and current navigation marker. Pair status colors with text; preserve keyboard focus and native
   menus. See [text and labels](https://develop.kde.org/hig/text_and_labels/) and
   [accessibility](https://develop.kde.org/hig/accessibility/).
-- Switch pages immediately and use one short reusable position animation to soften page
-  changes without fades or graphics effects. Apply touchpad pixel deltas directly; only
-  mouse-wheel scrolling uses a short, interruptible animation.
+- Switch pages immediately and use one short opacity transition to soften page changes without
+  allocating graphics effects. Let Qt Quick handle wheel, touchpad, and kinetic scrolling so
+  pointer input stays native to Flickable/ListView controls.
 - Keep management lists on their own pages so their native mouse-wheel and scrollbar
-  behavior never competes with a second page scrollbar. Page scrollbars use a larger
-  pointer-friendly handle and manual scrollbar interaction always cancels wheel animation.
+  behavior never competes with a second page scrollbar. Runtime selectors disable wheel
+  selection while collapsed so scrolling the page cannot silently change settings.
 
 ## Keyboard access
 
@@ -37,21 +38,20 @@ The file picker also opens with Space or Enter when focused.
 
 ## UI framework
 
-The production shell stays on PySide6/Qt Widgets for now. It keeps the existing Python
-backend direct, packages cleanly with RunEXE's current Linux builds, and provides mature
-desktop controls and accessibility. If the visual shell eventually needs richer continuous
-motion or touch-first interaction, Qt Quick/QML is the preferred migration path because it
-can reuse the same Qt/Python backend while moving rendering and transitions to Qt Quick's
-scene graph. A WebView or GTK rewrite would add a second application/runtime stack without
-solving a current functional limitation.
+The production shell uses PySide6 with Qt Quick/QML. QML owns the window, responsive page
+layout, controls, scrolling, and transitions; `RunEXEController` remains a QObject-backed
+client of the same Python analysis, library, environment, backup, Wine, and Proton services
+used by the CLI. Release wheels and source archives ship the QML files as package data, and
+the frozen glibc desktop bundle carries the Qt QML/Quick/Controls/Dialogs runtime modules.
+The musl release remains CLI-only because PyPI does not publish a musllinux PySide6 wheel.
 
 ## Visual checks
 
 `python scripts/capture_gui.py` renders an isolated demonstration without changing
-the user's saved settings. The default uses the current platform theme. These
-environment variables support repeatable visual checks:
+the user's saved settings. It uses the same QML shell as the production desktop
+entry point and Qt's Basic control style for repeatable captures. These environment
+variables support visual checks:
 
-- `RUNEXE_SCREENSHOT_SCHEME`: `system`, `light`, or `dark`.
 - `RUNEXE_SCREENSHOT_PAGE`: `overview`, `launch`, `runtimes`, `applications`,
   `environments`, `backups`, or `activity`. `library` remains an alias for Applications.
 - `RUNEXE_SCREENSHOT_EMPTY=1`: start without a selected application.
@@ -59,6 +59,6 @@ environment variables support repeatable visual checks:
   the supported minimum of 920 × 680.
 - `RUNEXE_SCREENSHOT_TARGET`: output PNG path (default: `assets/runexe-gui.png`).
 
-Explicit light/dark captures use Qt Fusion for repeatability. The running app keeps
-the platform style. Check native Linux rendering as well before a release; a
-Windows or offscreen capture cannot validate every distribution's Qt theme.
+Headless Linux captures use Qt's offscreen platform with software Qt Quick rendering.
+Check native Linux rendering as well before a release; a Windows or offscreen capture
+cannot validate every distribution's graphics stack and font rendering.
