@@ -88,3 +88,9 @@ def test_release_workflow_accepts_new_tag_pushes():
 
     assert "github.event_name == 'push' && !github.event.deleted" in workflow
     assert "!github.event.created" not in workflow
+
+
+def test_deb_package_declares_qt_glib_runtime():
+    packaging = (ROOT / "scripts/package_linux.py").read_text(encoding="utf-8")
+
+    assert "libglib2.0-0" in packaging
