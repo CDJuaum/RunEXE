@@ -7,7 +7,7 @@ case "${1:-}" in
     export DEBIAN_FRONTEND=noninteractive
     apt-get -o Acquire::Retries=3 -o Acquire::http::No-Cache=true update -qq
     apt-get install -y --no-install-recommends \
-      python3-pip python-is-python3 binutils dpkg-dev rpm desktop-file-utils \
+      python3-pip python-is-python3 libpython3.10 binutils dpkg-dev rpm desktop-file-utils \
       libegl1 libgl1 libx11-6 libx11-xcb1 libdbus-1-3 \
       libfontconfig1 libfreetype6 libglib2.0-0 \
       libwayland-client0 libwayland-cursor0 libwayland-egl1 \

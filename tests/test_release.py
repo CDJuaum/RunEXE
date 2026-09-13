@@ -78,6 +78,7 @@ def test_glibc_frozen_build_collects_qt_quick_runtime_while_musl_stays_cli_only(
     assert 'if [ "$1" = glibc ]; then' in script
     assert "extras='.[dev]'" in script
     assert "extras='.[dev,gui]'" in script
+    assert "libpython3.10" in script
     assert "python -m pip install --upgrade 'pip>=24.2' 'setuptools>=77.0.3' wheel" in script
     assert "python -m pip install \"$extras\" 'pyinstaller==6.22.2'" in script
 
