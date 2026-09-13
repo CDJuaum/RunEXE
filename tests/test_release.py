@@ -76,8 +76,10 @@ def test_glibc_frozen_build_collects_qt_quick_runtime_while_musl_stays_cli_only(
     assert "--hidden-import PySide6.QtQuickControls2" in script
     assert "QtQuick.Controls and QtQuick.Dialogs" in script
     assert 'if [ "$1" = glibc ]; then' in script
-    assert "python -m pip install '.[dev]' 'pyinstaller==6.22.2'" in script
-    assert "python -m pip install '.[dev,gui]' 'pyinstaller==6.22.2'" in script
+    assert "extras='.[dev]'" in script
+    assert "extras='.[dev,gui]'" in script
+    assert "python -m pip install --upgrade 'pip>=24.2' 'setuptools>=77.0.3' wheel" in script
+    assert "python -m pip install \"$extras\" 'pyinstaller==6.22.2'" in script
 
 
 def test_release_workflow_accepts_new_tag_pushes():

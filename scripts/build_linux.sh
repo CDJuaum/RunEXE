@@ -15,14 +15,20 @@ case "${1:-}" in
       libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 \
       libxcb-render0 libxcb-shape0 libxcb-shm0 libxcb-sync1 \
       libxcb-xfixes0 libxcb-xkb1 libxkbcommon0 libxkbcommon-x11-0
-    python -m pip install '.[dev,gui]' 'pyinstaller==6.22.2'
+    extras='.[dev,gui]'
     ;;
   musl)
     apk add --no-cache build-base binutils zlib-dev libffi-dev
-    python -m pip install '.[dev]' 'pyinstaller==6.22.2'
+    extras='.[dev]'
     ;;
   *) echo 'Usage: build_linux.sh glibc|musl' >&2; exit 2 ;;
 esac
+
+# Ubuntu 22.04 ships pip 22.x, which misreads this project's current PEP 621
+# metadata and installs it as UNKNOWN 0.0.0 without extras. Bootstrap modern
+# packaging tools before asking pip to resolve RunEXE's dev/gui extras.
+python -m pip install --upgrade 'pip>=24.2' 'setuptools>=77.0.3' wheel
+python -m pip install "$extras" 'pyinstaller==6.22.2'
 
 python -m pytest -q
 if [ "$1" = glibc ]; then
