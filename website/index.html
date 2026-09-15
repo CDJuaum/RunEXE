@@ -11,7 +11,7 @@
   <link rel="canonical" href="https://runexe.rrmtools.uk/">
   <link rel="icon" href="/assets/runexe-logo.png" type="image/png">
   <link rel="apple-touch-icon" href="/assets/runexe-logo.png">
-  <link rel="stylesheet" href="/styles.css?v=1.0.0">
+  <link rel="stylesheet" href="/styles.css?v=1.0.1">
 
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="RunEXE">
@@ -114,7 +114,11 @@
         </div>
         <div class="install-line" aria-label="Quick install command">
           <span class="prompt">$</span>
-          <code>curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/main/install.sh | sh</code>
+          <code id="hero-install-command">curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/main/install.sh | sh</code>
+          <button class="copy-command" type="button" data-copy-target="hero-install-command" aria-label="Copy install command">
+            <span class="copy-icon" aria-hidden="true">⧉</span>
+            <span class="copy-text">Copy</span>
+          </button>
           <span class="install-label">user install</span>
         </div>
         <p class="hero-note">No account. No analytics. No bundled Wine build. Your Windows apps and RunEXE state stay on your machine.</p>
@@ -304,7 +308,13 @@
         <div class="install-options">
           <div class="install-option install-option-wide">
             <span class="option-label">Recommended user install</span>
-            <code>curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/main/install.sh | sh</code>
+            <div class="install-command-row">
+              <code id="download-install-command">curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/main/install.sh | sh</code>
+              <button class="copy-command" type="button" data-copy-target="download-install-command" aria-label="Copy recommended install command">
+                <span class="copy-icon" aria-hidden="true">⧉</span>
+                <span class="copy-text">Copy</span>
+              </button>
+            </div>
           </div>
           <div class="install-option"><span class="option-label">First check</span><code>runexe doctor</code></div>
           <div class="install-option"><span class="option-label">Desktop</span><code>runexe-gui</code></div>
@@ -379,5 +389,31 @@
     </div>
     <div class="shell footer-bottom"><span>RunEXE 1.0</span><span>No tracking · No account · Open source</span></div>
   </footer>
+  <script>
+    document.querySelectorAll('.copy-command').forEach((button) => {
+      button.addEventListener('click', async () => {
+        const target = document.getElementById(button.dataset.copyTarget);
+        if (!target) return;
+
+        try {
+          await navigator.clipboard.writeText(target.textContent.trim());
+          const label = button.querySelector('.copy-text');
+          const previous = label.textContent;
+          label.textContent = 'Copied';
+          button.classList.add('is-copied');
+          window.setTimeout(() => {
+            label.textContent = previous;
+            button.classList.remove('is-copied');
+          }, 1600);
+        } catch (_) {
+          const selection = window.getSelection();
+          const range = document.createRange();
+          range.selectNodeContents(target);
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
+      });
+    });
+  </script>
 </body>
 </html>
