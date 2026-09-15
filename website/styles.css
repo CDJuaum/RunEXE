@@ -206,43 +206,67 @@ h1 {
 .install-line {
   margin-top: 29px;
   max-width: 720px;
-  min-height: 46px;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
-  gap: 10px;
-  align-items: center;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #0d1014;
+  overflow: hidden;
+  border: 1px solid var(--line-strong);
+  border-radius: 11px;
+  background: #090c0f;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .025), 0 12px 34px rgba(0, 0, 0, .16);
 }
 
-.install-line .prompt { color: var(--accent); font: 700 12px/1 var(--mono); }
-.install-line code {
+.install-line-head {
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 12px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(255, 255, 255, .025);
+  color: #858f9a;
+  font: 650 9px/1 var(--mono);
+  text-transform: uppercase;
+  letter-spacing: .09em;
+}
+
+.install-line-head > span:first-child { display: inline-flex; align-items: center; gap: 7px; color: #aeb6bf; }
+.terminal-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.install-label { color: var(--muted-2); font: 700 9px/1 var(--mono); }
+.hero-note { max-width: 620px; margin: 13px 0 0; color: #6f7a86; font-size: 12px; }
+
+.install-command-row {
   min-width: 0;
-  color: #c9d0d7;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 11px;
+  align-items: center;
+}
+
+.install-line > .install-command-row { padding: 13px 12px; }
+.install-command-row .prompt { color: var(--accent); font: 750 12px/1 var(--mono); user-select: none; }
+.install-command-row code {
+  display: block;
+  min-width: 0;
+  color: #d4dae0;
   font-size: 11px;
   line-height: 1.55;
   overflow-wrap: anywhere;
 }
-.install-label { color: var(--muted-2); font: 700 9px/1 var(--mono); text-transform: uppercase; letter-spacing: .10em; }
-.hero-note { max-width: 620px; margin: 13px 0 0; color: #6f7a86; font-size: 12px; }
 
 .copy-command {
-  min-height: 30px;
+  min-height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 0 9px;
+  padding: 0 10px;
   border: 1px solid var(--line-strong);
-  border-radius: 6px;
-  background: rgba(255, 255, 255, .035);
-  color: #aeb7c1;
+  border-radius: 7px;
+  background: #11161b;
+  color: #bbc3cc;
   cursor: pointer;
   font: 650 10px/1 var(--mono);
   white-space: nowrap;
-  transition: border-color .16s ease, background-color .16s ease, color .16s ease;
+  transition: transform .16s ease, border-color .16s ease, background-color .16s ease, color .16s ease;
 }
 
 .copy-command:hover,
@@ -253,8 +277,28 @@ h1 {
   outline: none;
 }
 
-.copy-command.is-copied { color: var(--accent); }
-.copy-icon { font-size: 13px; line-height: 1; }
+.copy-command:hover { transform: translateY(-1px); }
+.copy-command.is-copied { border-color: var(--accent-line); background: var(--accent-soft); color: var(--accent); }
+
+.copy-icon {
+  position: relative;
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+}
+
+.copy-icon::before,
+.copy-icon::after {
+  content: "";
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+}
+
+.copy-icon::before { left: 1px; top: 3px; opacity: .7; }
+.copy-icon::after { left: 4px; top: 0; background: inherit; }
 
 .hero-visual { min-width: 0; }
 
@@ -472,11 +516,15 @@ h1 {
 
 .install-option { min-width: 0; padding: 15px 17px; border-right: 1px solid var(--line); }
 .install-option:last-child { border-right: 0; }
-.install-option-wide { grid-column: 1 / -1; display: grid; grid-template-columns: 190px minmax(0, 1fr); align-items: center; border-right: 0; border-bottom: 1px solid var(--line); }
+.install-option-wide { grid-column: 1 / -1; display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 14px; align-items: center; border-right: 0; border-bottom: 1px solid var(--line); }
 .option-label { display: block; margin-bottom: 6px; color: #66717d; font-size: 9px; }
 .install-option code { display: block; min-width: 0; color: #c6cdd5; font-size: 11px; }
-.install-command-row { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; }
-.install-command-row code { line-height: 1.55; overflow-wrap: anywhere; }
+.install-command-row-compact {
+  padding: 6px 6px 6px 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #080b0e;
+}
 
 .download-foot {
   margin-top: 28px;
@@ -571,7 +619,6 @@ h1 {
   h1 { font-size: clamp(45px, 14vw, 64px); }
   .hero-lead { font-size: 17px; }
   .install-label { display: none; }
-  .install-line { grid-template-columns: auto minmax(0, 1fr) auto; }
   .visual-caption { display: none; }
   .trust-grid { grid-template-columns: repeat(2, 1fr); }
   .trust-grid > div { padding: 18px 16px; border-bottom: 1px solid var(--line); }
@@ -608,7 +655,8 @@ h1 {
 @media (max-width: 480px) {
   .hero-actions .button { width: 100%; }
   .eyebrow { font-size: 9px; }
-  .install-line { align-items: start; }
+  .install-line-head { min-height: 32px; }
+  .install-line > .install-command-row { align-items: start; }
   .copy-command { min-width: 34px; padding-inline: 8px; }
   .copy-command .copy-text { display: none; }
   .terminal-row { grid-template-columns: 1fr; gap: 3px; }
