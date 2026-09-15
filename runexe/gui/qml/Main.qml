@@ -1,6 +1,5 @@
 import QtQuick
 import QtQuick.Controls
-import QtQuick.Dialogs
 import QtQuick.Layouts
 
 ApplicationWindow {
@@ -26,16 +25,14 @@ ApplicationWindow {
     readonly property var pageTitles: [
         { title: "Overview", description: "Inspect an application and launch it with a clear compatibility plan.", icon: "▶", section: "RUN", startsSection: true },
         { title: "Launch setup", description: "Choose how the selected application should run and prepare its environment.", icon: "⚙", section: "RUN", startsSection: false },
-        { title: "Runtimes", description: "Inspect and manage Wine, Proton, Winetricks, Vulkan, and GPU readiness.", icon: "◉", section: "SYSTEM", startsSection: true },
         { title: "Applications", description: "Reopen recent software with its saved launch settings.", icon: "▦", section: "MANAGE", startsSection: true },
-        { title: "Environments", description: "Inspect, configure, back up, and remove isolated application environments.", icon: "◇", section: "MANAGE", startsSection: false },
         { title: "Backups", description: "Restore or remove saved environment snapshots.", icon: "↶", section: "MANAGE", startsSection: false },
         { title: "Activity", description: "Review analysis, preparation, launch output, and errors.", icon: "≡", section: "SUPPORT", startsSection: true },
-        { title: "Settings", description: "Change RunEXE appearance and application behavior.", icon: "⚙", section: "SUPPORT", startsSection: false }
+        { title: "Settings", description: "Manage preferences, runtimes, and isolated environments.", icon: "⚙", section: "SUPPORT", startsSection: false }
     ]
     readonly property var pageSources: [
-        "OverviewPage.qml", "LaunchSetupPage.qml", "RuntimesPage.qml", "ApplicationsPage.qml",
-        "EnvironmentsPage.qml", "BackupsPage.qml", "ActivityPage.qml", "SettingsPage.qml"
+        "OverviewPage.qml", "LaunchSetupPage.qml", "ApplicationsPage.qml",
+        "BackupsPage.qml", "ActivityPage.qml", "SettingsPage.qml"
     ]
 
     Binding { target: Theme; property: "mode"; value: controller.themeMode }
@@ -53,6 +50,15 @@ ApplicationWindow {
         showPage((currentPage + offset + pageSources.length) % pageSources.length)
     }
 
+    function showSettingsSection(section) {
+        const settingsIndex = pageSources.indexOf("SettingsPage.qml")
+        showPage(settingsIndex)
+        Qt.callLater(function() {
+            if (pageLoader.item && pageLoader.item.selectTab)
+                pageLoader.item.selectTab(section)
+        })
+    }
+
     onWidthChanged: saveSizeTimer.restart()
     onHeightChanged: saveSizeTimer.restart()
     onClosing: function(close) {
@@ -68,28 +74,28 @@ ApplicationWindow {
         onTriggered: controller.saveWindowSize(window.width, window.height)
     }
 
-    FileDialog {
+    AppFileDialog {
         id: openDialog
         title: "Choose Windows software"
-        fileMode: FileDialog.OpenFile
-        nameFilters: ["Windows software (*.exe *.appx *.msix *.appxbundle *.msixbundle)", "All files (*)"]
-        onAccepted: controller.analyzePath(selectedFile.toString())
+        mode: AppFileDialog.OpenFile
+        fileNameFilters: ["*.exe", "*.appx", "*.msix", "*.appxbundle", "*.msixbundle"]
+        onAcceptedUrl: function(url) { controller.analyzePath(url) }
     }
 
-    FolderDialog {
+    AppFileDialog {
         id: prefixDialog
         title: "Choose environment folder"
-        onAccepted: controller.setPrefix(selectedFolder.toString())
+        mode: AppFileDialog.OpenFolder
+        onAcceptedUrl: function(url) { controller.setPrefix(url) }
     }
 
-    FileDialog {
+    AppFileDialog {
         id: exportDialog
         title: "Export RunEXE support report"
-        fileMode: FileDialog.SaveFile
-        selectedFile: controller.suggestedReportUrl
-        defaultSuffix: "json"
-        nameFilters: ["JSON report (*.json)", "All files (*)"]
-        onAccepted: controller.exportSupportReport(selectedFile.toString())
+        mode: AppFileDialog.SaveFile
+        fileNameFilters: ["*.json"]
+        defaultFileName: "runexe-support-report.json"
+        onAcceptedUrl: function(url) { controller.exportSupportReport(url) }
     }
 
     AppDialog {
@@ -136,21 +142,22 @@ ApplicationWindow {
             messageDialog.open()
         }
         function onCloseConfirmationRequested() { closeDialog.open() }
+        function onSettingsSectionRequested(section) { window.showSettingsSection(section) }
     }
 
-    Shortcut { sequence: "Ctrl+O"; context: Qt.ApplicationShortcut; onActivated: openDialog.open() }
+    Shortcut { sequence: "Ctrl+O"; context: Qt.ApplicationShortcut; onActivated: openDialog.openAt("") }
     Shortcut {
         sequence: "Ctrl+R"
         context: Qt.ApplicationShortcut
-        onActivated: controller.sourceSelected ? controller.analyzeSelected() : openDialog.open()
+        onActivated: controller.sourceSelected ? controller.analyzeSelected() : openDialog.openAt("")
     }
     Shortcut { sequence: "Ctrl+Return"; context: Qt.ApplicationShortcut; onActivated: controller.launchApplication() }
     Shortcut { sequence: "Ctrl+Enter"; context: Qt.ApplicationShortcut; onActivated: controller.launchApplication() }
     Shortcut { sequence: "Ctrl+Tab"; context: Qt.ApplicationShortcut; onActivated: window.cyclePage(1) }
     Shortcut { sequence: "Ctrl+Shift+Tab"; context: Qt.ApplicationShortcut; onActivated: window.cyclePage(-1) }
-    Shortcut { sequence: "Ctrl+L"; context: Qt.ApplicationShortcut; onActivated: window.showPage(6) }
-    Shortcut { sequence: "Ctrl+Shift+L"; context: Qt.ApplicationShortcut; onActivated: window.showPage(3) }
-    Shortcut { sequence: "Ctrl+,"; context: Qt.ApplicationShortcut; onActivated: window.showPage(7) }
+    Shortcut { sequence: "Ctrl+L"; context: Qt.ApplicationShortcut; onActivated: window.showPage(4) }
+    Shortcut { sequence: "Ctrl+Shift+L"; context: Qt.ApplicationShortcut; onActivated: window.showPage(2) }
+    Shortcut { sequence: "Ctrl+,"; context: Qt.ApplicationShortcut; onActivated: window.showPage(5) }
 
     RowLayout {
         anchors.fill: parent
@@ -313,7 +320,7 @@ ApplicationWindow {
                             }
                         }
 
-                        AppButton { text: "Open…"; enabled: controller.interactionEnabled; onClicked: openDialog.open() }
+                        AppButton { text: "Open…"; enabled: controller.interactionEnabled; onClicked: openDialog.openAt("") }
                         AppButton { text: "Analyze"; enabled: controller.analyzeEnabled; onClicked: controller.analyzeSelected() }
                         Rectangle {
                             implicitWidth: statusText.implicitWidth + 22

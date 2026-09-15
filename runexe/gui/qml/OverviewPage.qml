@@ -63,7 +63,7 @@ Flickable {
                     Layout.alignment: Qt.AlignHCenter
                     text: "Choose file"
                     enabled: controller.interactionEnabled && root.openFileDialog !== null
-                    onClicked: root.openFileDialog.open()
+                    onClicked: root.openFileDialog.openAt("")
                 }
             }
 

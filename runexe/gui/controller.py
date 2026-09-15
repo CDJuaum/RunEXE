@@ -20,6 +20,7 @@ from PySide6.QtCore import (
     QProcess,
     QProcessEnvironment,
     QSettings,
+    QStorageInfo,
     Qt,
     QThreadPool,
     QTimer,
@@ -53,13 +54,20 @@ from runexe.environments import (
 from runexe.host import detect_host
 from runexe.library import ApplicationLibrary, ApplicationRecord, LaunchPreset
 from runexe.models import CompatibilityReport, ExecutableInfo, HostInfo
-from runexe.platform_support import install_system_component
+from runexe.platform_support import (
+    find_executable,
+    install_system_component,
+    system_component_managed,
+    uninstall_system_component,
+)
 from runexe.profiles import detect_runtime_issue
 from runexe.proton import (
     PROTON_TUNING_PRESETS,
     ProtonInstallation,
     discover_proton_installations,
     install_managed_proton,
+    managed_proton_root,
+    remove_managed_proton,
 )
 from runexe.runner import (
     PreparedEnvironment,
@@ -67,7 +75,12 @@ from runexe.runner import (
     open_runtime_configuration,
     prepare_environment,
 )
-from runexe.umu import ensure_umu_launcher
+from runexe.umu import (
+    ensure_umu_launcher,
+    install_managed_umu,
+    managed_umu_executable,
+    remove_managed_umu,
+)
 
 from .workers import Worker
 
@@ -86,6 +99,13 @@ class LibraryBundle:
     applications: list[ApplicationRecord]
     environments: list[EnvironmentInfo]
     backups: list[BackupInfo] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class RuntimeBundle:
+    host: HostInfo
+    proton_installations: list[ProtonInstallation]
+    managed_system_components: frozenset[str]
 
 
 class DictListModel(QAbstractListModel):
@@ -208,12 +228,12 @@ class RunEXEController(QObject):
 
     PAGE_OVERVIEW = 0
     PAGE_LAUNCH_SETUP = 1
-    PAGE_RUNTIMES = 2
-    PAGE_APPLICATIONS = 3
-    PAGE_ENVIRONMENTS = 4
-    PAGE_BACKUPS = 5
-    PAGE_ACTIVITY = 6
-    PAGE_SETTINGS = 7
+    PAGE_APPLICATIONS = 2
+    PAGE_BACKUPS = 3
+    PAGE_ACTIVITY = 4
+    PAGE_SETTINGS = 5
+    PAGE_RUNTIMES = PAGE_SETTINGS
+    PAGE_ENVIRONMENTS = PAGE_SETTINGS
 
     stateChanged = Signal()
     navigateRequested = Signal(int)
@@ -222,6 +242,7 @@ class RunEXEController(QObject):
     notificationRequested = Signal(str, str)
     closeConfirmationRequested = Signal()
     taskProgressRequested = Signal(str, str, int)
+    settingsSectionRequested = Signal(str)
 
     def __init__(
         self,
@@ -244,6 +265,7 @@ class RunEXEController(QObject):
         self.host: HostInfo | None = None
         self.compatibility: CompatibilityReport | None = None
         self.proton_installations: list[ProtonInstallation] = []
+        self._managed_system_components: frozenset[str] = frozenset()
         self._managed_environments: list[EnvironmentInfo] = []
         self._managed_backups: list[BackupInfo] = []
         self._application_rows: list[dict[str, Any]] = []
@@ -495,6 +517,56 @@ class RunEXEController(QObject):
             {"label": "Dark", "value": "dark"},
         ]
 
+    @Property("QVariantList", notify=stateChanged)
+    def filePickerLocations(self) -> list[dict[str, str]]:
+        rows: list[dict[str, str]] = []
+        seen: set[str] = set()
+
+        def add(label: str, path: str) -> None:
+            candidate = str(Path(path).expanduser())
+            if not candidate or candidate in seen:
+                return
+            seen.add(candidate)
+            rows.append(
+                {
+                    "label": label,
+                    "path": candidate,
+                    "url": QUrl.fromLocalFile(candidate).toString(),
+                }
+            )
+
+        add("Home", str(Path.home()))
+        root = Path(Path.home().anchor or "/")
+        add("Computer", str(root))
+        for environment in self._managed_environments:
+            relative_drive = "pfx/drive_c" if environment.backend == "proton" else "drive_c"
+            drive_c = environment.path / relative_drive
+            if drive_c.is_dir():
+                add(f"Windows · {environment.application}", str(drive_c))
+        for storage in QStorageInfo.mountedVolumes():
+            if not storage.isValid() or not storage.isReady() or storage.bytesTotal() <= 0:
+                continue
+            path = storage.rootPath()
+            if path.startswith(("/proc", "/sys", "/dev")):
+                continue
+            label = storage.displayName().strip() or Path(path).name or path
+            add(label, path)
+        return rows
+
+    @Slot(str, result=str)
+    def localFileUrl(self, path: str) -> str:
+        return QUrl.fromLocalFile(str(Path(path).expanduser())).toString()
+
+    @Slot(str, result=str)
+    def localPathFromUrl(self, value: str) -> str:
+        local = QUrl(value).toLocalFile()
+        return local or value
+
+    @Slot(str, str, result=str)
+    def joinFileUrl(self, folder_url: str, name: str) -> str:
+        folder = QUrl(folder_url).toLocalFile() or folder_url
+        return QUrl.fromLocalFile(str(Path(folder) / name)).toString()
+
     @Property("QVariantMap", notify=stateChanged)
     def wineMetric(self) -> dict[str, str]:
         return dict(self._wine_metric)
@@ -510,6 +582,42 @@ class RunEXEController(QObject):
     @Property("QVariantMap", notify=stateChanged)
     def vulkanMetric(self) -> dict[str, str]:
         return dict(self._vulkan_metric)
+
+    @Property(bool, notify=stateChanged)
+    def wineInstalled(self) -> bool:
+        return bool(self.host and self.host.wine_installed)
+
+    @Property(bool, notify=stateChanged)
+    def winetricksInstalled(self) -> bool:
+        return bool(self.host and self.host.winetricks_installed)
+
+    @Property(bool, notify=stateChanged)
+    def vulkanToolsInstalled(self) -> bool:
+        return find_executable("vulkaninfo") is not None
+
+    @Property(bool, notify=stateChanged)
+    def managedProtonInstalled(self) -> bool:
+        root = managed_proton_root().expanduser().resolve()
+        return any(
+            item.install_dir.expanduser().resolve().parent == root
+            for item in self.proton_installations
+        )
+
+    @Property(bool, notify=stateChanged)
+    def managedUmuInstalled(self) -> bool:
+        return managed_umu_executable() is not None
+
+    @Property(bool, notify=stateChanged)
+    def runexeManagedWineInstalled(self) -> bool:
+        return "wine" in self._managed_system_components
+
+    @Property(bool, notify=stateChanged)
+    def runexeManagedWinetricksInstalled(self) -> bool:
+        return "winetricks" in self._managed_system_components
+
+    @Property(bool, notify=stateChanged)
+    def runexeManagedVulkanToolsInstalled(self) -> bool:
+        return "vulkan" in self._managed_system_components
 
     @Property("QVariantMap", notify=stateChanged)
     def applicationMetric(self) -> dict[str, str]:
@@ -1039,16 +1147,27 @@ class RunEXEController(QObject):
     # ------------------------------------------------------------- Runtime management
     @Slot()
     def refreshRuntimes(self) -> None:
-        def detect() -> tuple[HostInfo, list[ProtonInstallation]]:
+        def detect() -> RuntimeBundle:
             installations = discover_proton_installations()
-            return detect_host(proton_installations=installations), installations
+            managed_components = frozenset(
+                component
+                for component in ("wine", "winetricks", "vulkan")
+                if system_component_managed(component)
+            )
+            return RuntimeBundle(
+                detect_host(proton_installations=installations),
+                installations,
+                managed_components,
+            )
 
         self._start_task(
             "runtimes", "Refreshing Wine and Proton detection", detect, self._runtimes_ready
         )
 
-    def _runtimes_ready(self, result: tuple[HostInfo, list[ProtonInstallation]]) -> None:
-        self.host, self.proton_installations = result
+    def _runtimes_ready(self, result: RuntimeBundle) -> None:
+        self.host = result.host
+        self.proton_installations = result.proton_installations
+        self._managed_system_components = result.managed_system_components
         self._coerce_selected_proton()
         self._update_runtime_state()
         if self.executable is not None:
@@ -1065,6 +1184,40 @@ class RunEXEController(QObject):
         available = {str(item.script) for item in self.proton_installations}
         if self._proton and self._proton not in available:
             self._proton = ""
+
+    @Slot(str)
+    def installRuntimeComponent(self, component: str) -> None:
+        if self._action_blocked():
+            return
+        if component not in {"wine", "winetricks", "vulkan"}:
+            self.messageRequested.emit(
+                "error", "Unsupported runtime component", f"RunEXE cannot install “{component}”."
+            )
+            return
+        label = {
+            "wine": "Wine",
+            "winetricks": "Winetricks",
+            "vulkan": "Vulkan tools",
+        }[component]
+        key = f"install-{component}"
+        self._prepare_task_progress(key, f"Starting {label} installation", 0)
+        self._start_task(
+            key,
+            f"Installing {label}",
+            lambda: install_system_component(component, progress=self._progress_callback(key)),
+            lambda _result: self._system_runtime_changed(label, "installed"),
+        )
+
+    def _system_runtime_changed(self, label: str, action: str) -> None:
+        if label == "Vulkan tools" and action == "installed":
+            self._log("Vulkan tools installation completed.")
+        else:
+            self._log(f"{label} {action} through the system package manager.")
+        self._task_status = f"{label} {action}"
+        self._set_header_status(f"{label} {action}", "ready")
+        self._notify(f"{label} {action}", "Runtime detection is being refreshed.")
+        QTimer.singleShot(0, self.refreshRuntimes)
+        self.stateChanged.emit()
 
     @Slot()
     def installProton(self) -> None:
@@ -1108,11 +1261,11 @@ class RunEXEController(QObject):
         self._start_task(
             "install-umu",
             "Installing UMU Launcher",
-            lambda: ensure_umu_launcher(progress=self._progress_callback("install-umu")),
+            lambda: install_managed_umu(progress=self._progress_callback("install-umu")),
             self._umu_launcher_installed,
         )
 
-    def _umu_launcher_installed(self, executable: str) -> None:
+    def _umu_launcher_installed(self, executable: str | Path) -> None:
         self._log(f"UMU Launcher ready: {executable}")
         self._task_status = "UMU Launcher installed"
         self._set_header_status("UMU Launcher installed", "ready")
@@ -1125,23 +1278,73 @@ class RunEXEController(QObject):
 
     @Slot()
     def installVulkanTools(self) -> None:
-        if self._action_blocked():
-            return
-        self._prepare_task_progress("install-vulkan", "Starting Vulkan tools installation", 0)
-        self._start_task(
-            "install-vulkan",
-            "Installing Vulkan tools",
-            lambda: install_system_component(
-                "vulkan", progress=self._progress_callback("install-vulkan")
-            ),
-            self._vulkan_tools_installed,
-        )
+        self.installRuntimeComponent("vulkan")
 
     def _vulkan_tools_installed(self, _result: object) -> None:
         self._log("Vulkan tools installation completed.")
         self._task_status = "Vulkan tools installed"
         self._set_header_status("Vulkan tools installed", "ready")
         self._notify("Vulkan tools installed", "Graphics readiness can now be checked again.")
+        QTimer.singleShot(0, self.refreshRuntimes)
+        self.stateChanged.emit()
+
+    @Slot(str)
+    def uninstallRuntimeComponent(self, component: str) -> None:
+        if self._action_blocked():
+            return
+
+        if component == "proton":
+            self._prepare_task_progress("remove-proton", "Removing RunEXE-managed Proton", 0)
+            self._start_task(
+                "remove-proton",
+                "Removing RunEXE-managed Proton",
+                remove_managed_proton,
+                lambda removed: self._managed_runtime_removed("Proton", int(removed)),
+            )
+            return
+        if component == "umu":
+            self._prepare_task_progress("remove-umu", "Removing RunEXE-managed UMU Launcher", 0)
+            self._start_task(
+                "remove-umu",
+                "Removing RunEXE-managed UMU Launcher",
+                remove_managed_umu,
+                lambda removed: self._managed_runtime_removed("UMU Launcher", int(bool(removed))),
+            )
+            return
+        if component not in {"wine", "winetricks", "vulkan"}:
+            self.messageRequested.emit(
+                "error", "Unsupported runtime component", f"RunEXE cannot remove “{component}”."
+            )
+            return
+        if component not in self._managed_system_components:
+            self.messageRequested.emit(
+                "info",
+                "System-managed component",
+                "RunEXE only removes system packages that it originally installed "
+                "and can still verify.",
+            )
+            return
+
+        label = {
+            "wine": "Wine",
+            "winetricks": "Winetricks",
+            "vulkan": "Vulkan tools",
+        }[component]
+        key = f"remove-{component}"
+        self._prepare_task_progress(key, f"Starting {label} removal", 0)
+        self._start_task(
+            key,
+            f"Removing {label}",
+            lambda: uninstall_system_component(component, progress=self._progress_callback(key)),
+            lambda _result: self._system_runtime_changed(label, "removed"),
+        )
+
+    def _managed_runtime_removed(self, label: str, removed: int) -> None:
+        detail = f"Removed {removed} managed installation(s)." if removed else "Nothing to remove."
+        self._log(f"{label} removal completed. {detail}")
+        self._task_status = f"{label} removed" if removed else f"No managed {label} found"
+        self._set_header_status(self._task_status, "ready")
+        self._notify(f"{label} removal complete", detail)
         QTimer.singleShot(0, self.refreshRuntimes)
         self.stateChanged.emit()
 
@@ -1966,6 +2169,8 @@ class RunEXEController(QObject):
             f"Choose {article} {item} from the list before using this action.",
         )
         self.navigateRequested.emit(page)
+        if item == "environment":
+            self.settingsSectionRequested.emit("environments")
 
     # ------------------------------------------------------------- Background tasks
     def _prepare_task_progress(self, key: str, label: str, value: int = -1) -> None:

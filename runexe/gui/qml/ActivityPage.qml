@@ -26,7 +26,7 @@ Item {
                 AppButton {
                     text: "Export report"
                     enabled: root.exportDialog !== null
-                    onClicked: root.exportDialog.open()
+                    onClicked: root.exportDialog.openAt("")
                 }
                 AppButton { text: "Copy"; onClicked: controller.copyActivity() }
                 AppButton { text: "Clear"; onClicked: clearDialog.open() }

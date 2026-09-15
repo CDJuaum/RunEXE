@@ -111,6 +111,10 @@ def main() -> None:
         if selected_page not in page_indices:
             raise ValueError(f"Unknown RUNEXE_SCREENSHOT_PAGE: {selected_page}")
         controller.navigateRequested.emit(page_indices[selected_page])
+        if selected_page in {"runtime", "runtimes", "environments"}:
+            controller.settingsSectionRequested.emit(
+                "runtimes" if selected_page in {"runtime", "runtimes"} else "environments"
+            )
         app.processEvents()
         settle = QEventLoop()
         QTimer.singleShot(260, settle.quit)

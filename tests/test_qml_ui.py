@@ -158,7 +158,7 @@ def test_qml_shell_loads_all_pages(qt_app, tmp_path):
 
     assert root.property("minimumWidth") == 920
     assert root.property("minimumHeight") == 680
-    for page in range(8):
+    for page in range(6):
         root.showPage(page)
         qt_app.processEvents()
         assert root.property("currentPage") == page
@@ -175,7 +175,7 @@ def test_settings_and_runtime_progress_surfaces_are_available(qt_app, tmp_path):
     qt_app.processEvents()
     assert root.findChild(QQuickItem, "settingsPage") is not None
 
-    root.showPage(controller.PAGE_RUNTIMES)
+    root.showSettingsSection("runtimes")
     qt_app.processEvents()
     assert root.findChild(QQuickItem, "runtimeInstallProgress") is not None
     assert root.findChild(QQuickItem, "installUmuButton") is not None

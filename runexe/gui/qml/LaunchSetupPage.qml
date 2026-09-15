@@ -118,7 +118,7 @@ Flickable {
                 AppButton {
                     text: "Choose folder"
                     enabled: controller.interactionEnabled && root.prefixDialog !== null
-                    onClicked: root.prefixDialog.open()
+                    onClicked: root.prefixDialog.openAt(controller.prefix ? controller.localFileUrl(controller.prefix) : "")
                 }
             }
             Text {

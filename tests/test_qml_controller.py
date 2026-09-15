@@ -11,7 +11,7 @@ from PySide6.QtWidgets import QApplication
 
 from runexe.analyzer import analyze_executable
 from runexe.compatibility import analyze_compatibility
-from runexe.gui.controller import AnalysisBundle, LibraryBundle, RunEXEController
+from runexe.gui.controller import AnalysisBundle, LibraryBundle, RunEXEController, RuntimeBundle
 from runexe.library import ApplicationLibrary, LaunchPreset
 from runexe.models import HostInfo
 from runexe.proton import ProtonInstallation
@@ -239,7 +239,8 @@ def test_runtime_provisioning_actions_use_background_hooks(qt_app, tmp_path, mon
     tasks = []
     refreshes = []
     vulkan_components = []
-    umu_installs = []
+    umu_checks = []
+    managed_umu_installs = []
 
     monkeypatch.setattr(
         "runexe.gui.controller.install_managed_proton",
@@ -247,7 +248,11 @@ def test_runtime_provisioning_actions_use_background_hooks(qt_app, tmp_path, mon
     )
     monkeypatch.setattr(
         "runexe.gui.controller.ensure_umu_launcher",
-        lambda *, progress=None: umu_installs.append(True) or "/managed/umu-run",
+        lambda *, progress=None: umu_checks.append(True) or "/usr/bin/umu-run",
+    )
+    monkeypatch.setattr(
+        "runexe.gui.controller.install_managed_umu",
+        lambda *, progress=None: managed_umu_installs.append(True) or tmp_path / "managed-umu-run",
     )
     monkeypatch.setattr(
         "runexe.gui.controller.install_system_component",
@@ -266,7 +271,8 @@ def test_runtime_provisioning_actions_use_background_hooks(qt_app, tmp_path, mon
     qt_app.processEvents()
 
     assert [key for key, _label in tasks] == ["install-proton", "install-umu", "install-vulkan"]
-    assert umu_installs == [True, True]
+    assert umu_checks == [True]
+    assert managed_umu_installs == [True]
     assert vulkan_components == ["vulkan"]
     assert refreshes == [True, True, True]
     assert "Managed Proton ready" in controller.activityText
@@ -312,12 +318,30 @@ def test_runtime_refresh_reuses_one_proton_snapshot(qt_app, monkeypatch):
 
     monkeypatch.setattr("runexe.gui.controller.discover_proton_installations", discover)
     monkeypatch.setattr("runexe.gui.controller.detect_host", detect)
+    monkeypatch.setattr("runexe.gui.controller.system_component_managed", lambda _component: False)
     monkeypatch.setattr(controller, "_start_task", lambda key, label, run, done: done(run()))
 
     controller.refreshRuntimes()
 
     assert discoveries == [True]
     assert controller.host is host
+
+
+def test_runtime_bundle_exposes_only_verified_runexe_system_packages(qt_app):
+    controller = RunEXEController(auto_refresh=False)
+    controller._runtimes_ready(
+        RuntimeBundle(
+            HostInfo("x86_64", True, "wine-11", True, True, True),
+            [],
+            frozenset({"wine", "vulkan"}),
+        )
+    )
+
+    assert controller.wineInstalled
+    assert controller.winetricksInstalled
+    assert controller.runexeManagedWineInstalled
+    assert not controller.runexeManagedWinetricksInstalled
+    assert controller.runexeManagedVulkanToolsInstalled
 
 
 def test_failed_new_analysis_clears_previous_launch_state(qt_app, tmp_path, monkeypatch):

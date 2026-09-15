@@ -249,6 +249,35 @@ def install_managed_umu(
     return final
 
 
+def remove_managed_umu() -> bool:
+    """Remove only the UMU launcher installed in RunEXE's user-owned runtime directory."""
+
+    configured_root = managed_umu_root().expanduser()
+    if configured_root.is_symlink():
+        raise UmuError("Refusing to remove UMU from a symlinked managed runtime directory.")
+    if not configured_root.exists():
+        return False
+    if not configured_root.is_dir():
+        raise UmuError("Managed UMU runtime path is not a directory.")
+    root = configured_root.resolve()
+    removed = False
+    for name in ("umu-run", "VERSION"):
+        candidate = root / name
+        if candidate.is_symlink():
+            raise UmuError(f"Refusing to remove unsafe managed UMU path: {candidate}")
+        if not candidate.exists():
+            continue
+        if not candidate.is_file() or candidate.resolve().parent != root:
+            raise UmuError(f"Refusing to remove unsafe managed UMU path: {candidate}")
+        candidate.unlink()
+        removed = True
+    try:
+        root.rmdir()
+    except OSError:
+        pass
+    return removed
+
+
 def ensure_umu_launcher(
     *,
     progress: Callable[[str, int | None], None] | None = None,

@@ -11,6 +11,7 @@ from runexe.proton import (
     discover_proton_installations,
     install_managed_proton,
     proton_environment,
+    remove_managed_proton,
     select_proton,
 )
 
@@ -208,3 +209,43 @@ def test_proton_tuning_presets_are_temporary_environment_overrides(tmp_path, mon
     assert diagnostics["PROTON_LOG_DIR"] == str(tmp_path / "state" / "runexe" / "logs")
     assert fallback["PROTON_USE_WINED3D"] == "1"
     assert "PROTON_USE_WINED3D" not in diagnostics
+
+
+def test_remove_managed_proton_only_removes_managed_runtime_builds(tmp_path, monkeypatch):
+    managed_root = tmp_path / "data" / "runexe" / "runtimes" / "proton"
+    managed = managed_root / "GE-Proton-test"
+    managed.mkdir(parents=True)
+    (managed / "proton").touch()
+    unrelated = managed_root / "notes"
+    unrelated.mkdir()
+    external = tmp_path / "Steam" / "compatibilitytools.d" / "GE-Proton-external"
+    external.mkdir(parents=True)
+    (external / "proton").touch()
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+
+    assert remove_managed_proton() == 1
+    assert not managed.exists()
+    assert unrelated.exists()
+    assert external.exists()
+
+
+def test_remove_managed_proton_skips_symlinked_build_and_is_idempotent(tmp_path, monkeypatch):
+    managed_root = tmp_path / "data" / "runexe" / "runtimes" / "proton"
+    managed_root.mkdir(parents=True)
+    outside = tmp_path / "outside-proton"
+    outside.mkdir()
+    (outside / "proton").touch()
+    link = managed_root / "GE-Proton-linked"
+    try:
+        link.symlink_to(outside, target_is_directory=True)
+    except OSError:
+        pytest.skip("directory symlinks are unavailable on this host")
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+
+    assert remove_managed_proton() == 0
+    assert outside.exists()
+    assert link.is_symlink()
+
+    link.unlink()
+    managed_root.rmdir()
+    assert remove_managed_proton() == 0

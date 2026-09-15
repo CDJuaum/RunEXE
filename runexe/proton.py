@@ -315,9 +315,7 @@ def _latest_ge_proton_asset() -> tuple[str, str]:
             if not re.fullmatch(r"[A-Za-z0-9._+-]+", release_name):
                 raise ProtonError("The latest GE-Proton release name is unsafe for a local path.")
             return release_name, url
-    raise ProtonError(
-        f"The latest GE-Proton release does not contain a {host} runtime asset."
-    )
+    raise ProtonError(f"The latest GE-Proton release does not contain a {host} runtime asset.")
 
 
 def _download_file(
@@ -472,6 +470,34 @@ def install_managed_proton(
     if progress is not None:
         progress(f"Step 5 of 5 · {tag} is ready", 100)
     return installation
+
+
+def remove_managed_proton() -> int:
+    """Remove only Proton builds installed inside RunEXE's managed runtime directory."""
+
+    configured_root = managed_proton_root().expanduser()
+    if configured_root.is_symlink():
+        raise ProtonError("Refusing to remove Proton from a symlinked managed runtime directory.")
+    if not configured_root.exists():
+        return 0
+    if not configured_root.is_dir():
+        raise ProtonError("Managed Proton runtime path is not a directory.")
+    root = configured_root.resolve()
+    removed = 0
+    for child in tuple(configured_root.iterdir()):
+        if child.is_symlink():
+            continue
+        candidate = child.resolve()
+        if candidate.parent != root:
+            continue
+        if candidate.is_dir() and (candidate / "proton").is_file():
+            shutil.rmtree(candidate)
+            removed += 1
+    try:
+        root.rmdir()
+    except OSError:
+        pass
+    return removed
 
 
 def select_proton(
