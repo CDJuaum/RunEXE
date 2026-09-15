@@ -7,7 +7,7 @@ This guide covers RunEXE installation choices, Linux runtime prerequisites, upgr
 Install RunEXE for the current user without changing the system Python or using `sudo`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/refs/heads/main/install.sh | sh
 ```
 
 The installer resolves the latest published GitHub release and installs that tagged source. Changes on `main` therefore do not reach normal installs until they are released. It creates an isolated application environment under `$XDG_DATA_HOME/runexe/app`, exposes `runexe` and `runexe-gui` through `~/.local/bin`, and adds RunEXE to the desktop application menu.
@@ -15,7 +15,7 @@ The installer resolves the latest published GitHub release and installs that tag
 For a quick test of the current unreleased `main` branch, opt in explicitly:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/main/install.sh | sh -s -- --main
+curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/refs/heads/main/install.sh | sh -s -- --main
 ```
 
 Run the host check afterward:
@@ -27,8 +27,8 @@ runexe doctor
 For a console-only or menu-free installation:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/main/install.sh | sh -s -- --cli-only
-curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/main/install.sh | sh -s -- --no-desktop
+curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/refs/heads/main/install.sh | sh -s -- --cli-only
+curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/refs/heads/main/install.sh | sh -s -- --no-desktop
 ```
 
 If you prefer to inspect the script first, download [`install.sh`](../install.sh), review it, and run it locally.

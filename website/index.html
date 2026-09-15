@@ -116,11 +116,11 @@
         <div class="install-line" aria-label="Quick install command">
           <div class="install-line-head">
             <span><i class="terminal-dot" aria-hidden="true"></i> Quick install</span>
-            <span class="install-label">User install · no sudo</span>
+            <span class="install-label">Latest release · no sudo</span>
           </div>
           <div class="install-command-row">
             <span class="prompt" aria-hidden="true">$</span>
-            <code id="hero-install-command">curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/main/install.sh | sh</code>
+            <code id="hero-install-command">curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/refs/heads/main/install.sh | sh</code>
             <button class="copy-command" type="button" data-copy-target="hero-install-command" aria-label="Copy install command" title="Copy install command">
               <span class="copy-icon" aria-hidden="true"></span>
               <span class="copy-text">Copy</span>
@@ -313,11 +313,22 @@
 
         <div class="install-options">
           <div class="install-option install-option-wide">
-            <span class="option-label">Recommended user install</span>
+            <span class="option-label">Recommended · latest release</span>
             <div class="install-command-row install-command-row-compact">
               <span class="prompt" aria-hidden="true">$</span>
-              <code id="download-install-command">curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/main/install.sh | sh</code>
+              <code id="download-install-command">curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/refs/heads/main/install.sh | sh</code>
               <button class="copy-command" type="button" data-copy-target="download-install-command" aria-label="Copy recommended install command" title="Copy install command">
+                <span class="copy-icon" aria-hidden="true"></span>
+                <span class="copy-text">Copy</span>
+              </button>
+            </div>
+          </div>
+          <div class="install-option install-option-wide">
+            <span class="option-label">Test current main</span>
+            <div class="install-command-row install-command-row-compact">
+              <span class="prompt" aria-hidden="true">$</span>
+              <code id="main-install-command">curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/refs/heads/main/install.sh | sh -s -- --main</code>
+              <button class="copy-command" type="button" data-copy-target="main-install-command" aria-label="Copy main branch test install command" title="Copy test install command">
                 <span class="copy-icon" aria-hidden="true"></span>
                 <span class="copy-text">Copy</span>
               </button>

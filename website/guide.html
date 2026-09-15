@@ -100,8 +100,8 @@
         <section id="runexe">
           <h2>A practical RunEXE workflow</h2>
           <h3>1. Install RunEXE</h3>
-          <div class="article-code">curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/main/install.sh | sh</div>
-          <p>The user installer creates an isolated RunEXE installation under your XDG data directory, exposes the command-line and desktop launchers through <code>~/.local/bin</code>, and does not use <code>sudo</code>.</p>
+          <div class="article-code">curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/refs/heads/main/install.sh | sh</div>
+          <p>The user installer installs the latest published RunEXE release into an isolated environment under your XDG data directory, exposes the command-line and desktop launchers through <code>~/.local/bin</code>, and does not use <code>sudo</code>. Add <code>-s -- --main</code> when you deliberately want to test the current unreleased main branch.</p>
 
           <h3>2. Check the Linux host</h3>
           <div class="article-code">runexe doctor</div>

@@ -48,13 +48,13 @@ The desktop interface is built with Qt Quick/QML and uses the same analysis, run
 Install RunEXE for the current user without cloning the repository or changing the system Python:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/refs/heads/main/install.sh | sh
 ```
 
 The installer resolves the latest published GitHub release and installs that tagged source by default, so work in progress on `main` is not pulled into normal installs. To quickly test the current `main` branch instead:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/main/install.sh | sh -s -- --main
+curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/refs/heads/main/install.sh | sh -s -- --main
 ```
 
 Check the Linux host before the first launch:
