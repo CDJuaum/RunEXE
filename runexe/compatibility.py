@@ -823,7 +823,7 @@ def calculate_compatibility_score(
         penalty = min(75, 55 + 10 * (len(report.blocking_issues) - 1))
         score -= penalty
         factors.append(
-            f"-{penalty}: {len(report.blocking_issues)} blocking issue(s) must be resolved "
+            f"-{penalty}: Launch blockers — {len(report.blocking_issues)} blocking issue(s) must be resolved "
             "before launch."
         )
     else:
@@ -832,7 +832,9 @@ def calculate_compatibility_score(
     if report.warnings:
         penalty = min(36, 12 * len(report.warnings))
         score -= penalty
-        factors.append(f"-{penalty}: {len(report.warnings)} compatibility warning(s) need review.")
+        factors.append(
+            f"-{penalty}: compatibility warnings — {len(report.warnings)} warning(s) need review."
+        )
     else:
         factors.append("No compatibility warnings were detected.")
 
@@ -840,13 +842,13 @@ def calculate_compatibility_score(
         penalty = min(12, 3 * len(report.required_verbs))
         score -= penalty
         factors.append(
-            f"-{penalty}: {len(report.required_verbs)} additional Windows component(s) may need "
+            f"-{penalty}: Required Windows components — {len(report.required_verbs)} component(s) may need "
             "provisioning."
         )
 
     if host is None:
         score -= 8
-        factors.append("-8: Host runtime and graphics readiness were not checked.")
+        factors.append("-8: Host readiness — runtime and graphics readiness were not checked.")
 
     score = max(0, min(100, score))
     if report.blocking_issues:

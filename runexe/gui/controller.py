@@ -324,6 +324,9 @@ class RunEXEController(QObject):
         self._subsystem = "-"
         self._dependency_text = "-"
         self._guidance = ["Analyze an application to see compatibility guidance."]
+        self._compatibility_issues = []
+        self._score_deductions = []
+        self._compatibility_notes = ["Analyze an application to see compatibility guidance."]
 
         self._profile_visible = False
         self._profile_title = "Compatibility preset detected"
@@ -647,6 +650,18 @@ class RunEXEController(QObject):
     def guidance(self) -> list[str]:
         return list(self._guidance)
 
+    @Property("QVariantList", notify=stateChanged)
+    def compatibilityIssues(self) -> list[dict[str, str]]:
+        return [dict(item) for item in self._compatibility_issues]
+
+    @Property("QVariantList", notify=stateChanged)
+    def scoreDeductions(self) -> list[dict[str, str]]:
+        return [dict(item) for item in self._score_deductions]
+
+    @Property("QStringList", notify=stateChanged)
+    def compatibilityNotes(self) -> list[str]:
+        return list(self._compatibility_notes)
+
     @Property(bool, notify=stateChanged)
     def profileVisible(self) -> bool:
         return self._profile_visible
@@ -962,6 +977,11 @@ class RunEXEController(QObject):
             "Pending", "Calculating local compatibility readiness", "warning"
         )
         self._guidance = ["Analysis is in progress. Launch is available after validation."]
+        self._compatibility_issues = []
+        self._score_deductions = []
+        self._compatibility_notes = [
+            "Analysis is in progress. Launch is available after validation."
+        ]
         self._environment_status = "Awaiting analysis"
         self._update_environment_preview()
 
@@ -1030,6 +1050,9 @@ class RunEXEController(QObject):
         self._runtime_metric = _metric("Unavailable", "Analysis did not complete", "error")
         self._compatibility_metric = _metric("Unavailable", "Analysis did not complete", "error")
         self._guidance = [message]
+        self._compatibility_issues = [{"kind": "error", "text": message}]
+        self._score_deductions = []
+        self._compatibility_notes = []
         self._task_failed(message, details)
 
     @Slot()
@@ -2003,6 +2026,23 @@ class RunEXEController(QObject):
             *(f"SCORE  {factor}" for factor in report.compatibility_factors),
             *(f"INFO  {note}" for note in report.notes),
         ] or ["No compatibility concerns were detected."]
+        self._compatibility_issues = []
+        for issue in report.blocking_issues:
+            self._compatibility_issues.append({"kind": "blocked", "text": issue})
+        for warning in report.warnings:
+            self._compatibility_issues.append({"kind": "warning", "text": warning})
+
+        self._score_deductions = []
+        for factor in report.compatibility_factors:
+            if factor.startswith("-") and ":" in factor:
+                impact, reason = factor.split(":", 1)
+                self._score_deductions.append(
+                    {"impact": f"{impact.strip()} points", "reason": reason.strip()}
+                )
+
+        self._compatibility_notes = list(report.notes)
+        if not self._compatibility_issues and not self._score_deductions:
+            self._compatibility_notes.insert(0, "No compatibility concerns were detected.")
         self._environment_status = f"{report.backend.upper()} | {report.architecture}"
         self._update_profile_state()
         self._update_environment_preview()

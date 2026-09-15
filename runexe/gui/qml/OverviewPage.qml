@@ -123,7 +123,7 @@ Flickable {
 
             Card {
                 Layout.fillWidth: true
-                Layout.fillHeight: true
+                Layout.alignment: Qt.AlignTop
                 SectionTitle { Layout.fillWidth: true; title: "Application details"; description: "File and runtime requirements." }
                 GridLayout {
                     Layout.fillWidth: true
@@ -142,26 +142,123 @@ Flickable {
             }
 
             Card {
+                id: compatibilityCard
                 Layout.fillWidth: true
-                Layout.fillHeight: true
-                SectionTitle { Layout.fillWidth: true; title: "Compatibility"; description: "Review warnings before launching." }
-                Repeater {
-                    model: controller.guidance
-                    delegate: Rectangle {
-                        required property string modelData
-                        Layout.fillWidth: true
-                        implicitHeight: guidanceText.implicitHeight + 14
-                        radius: 7
-                        color: Theme.field
-                        border.color: modelData.startsWith("BLOCKED") ? Theme.error
-                                      : modelData.startsWith("WARNING") ? Theme.warning : Theme.borderSoft
+                Layout.alignment: Qt.AlignTop
+                Layout.preferredHeight: Math.min(Math.max(compatibilityBody.implicitHeight + 100, 180), 430)
+
+                SectionTitle {
+                    Layout.fillWidth: true
+                    title: "Compatibility"
+                    description: "See exactly what affects the readiness score."
+                }
+
+                Flickable {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.minimumHeight: Math.min(compatibilityBody.implicitHeight, 120)
+                    contentWidth: width
+                    contentHeight: compatibilityBody.implicitHeight
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+
+                    ColumnLayout {
+                        id: compatibilityBody
+                        width: parent.width
+                        spacing: 10
+
                         Text {
-                            id: guidanceText
-                            anchors.fill: parent
-                            anchors.margins: 7
-                            text: modelData
+                            Layout.fillWidth: true
+                            visible: controller.scoreDeductions.length > 0
+                            text: "Score deductions"
                             color: Theme.text
-                            wrapMode: Text.Wrap
+                            font.weight: Font.DemiBold
+                        }
+
+                        Repeater {
+                            model: controller.scoreDeductions
+                            delegate: Rectangle {
+                                required property var modelData
+                                Layout.fillWidth: true
+                                implicitHeight: scoreRow.implicitHeight + 16
+                                radius: 7
+                                color: Theme.field
+                                border.color: Theme.warning
+
+                                RowLayout {
+                                    id: scoreRow
+                                    anchors.fill: parent
+                                    anchors.margins: 8
+                                    spacing: 10
+
+                                    Text {
+                                        text: modelData.impact
+                                        color: Theme.warning
+                                        font.weight: Font.DemiBold
+                                        Layout.alignment: Qt.AlignTop
+                                    }
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: modelData.reason
+                                        color: Theme.text
+                                        wrapMode: Text.Wrap
+                                    }
+                                }
+                            }
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            visible: controller.compatibilityIssues.length > 0
+                            text: "Issues to review"
+                            color: Theme.text
+                            font.weight: Font.DemiBold
+                            Layout.topMargin: controller.scoreDeductions.length > 0 ? 4 : 0
+                        }
+
+                        Repeater {
+                            model: controller.compatibilityIssues
+                            delegate: Rectangle {
+                                required property var modelData
+                                Layout.fillWidth: true
+                                implicitHeight: issueText.implicitHeight + 16
+                                radius: 7
+                                color: Theme.field
+                                border.color: modelData.kind === "blocked" || modelData.kind === "error"
+                                              ? Theme.error : Theme.warning
+                                Text {
+                                    id: issueText
+                                    anchors.fill: parent
+                                    anchors.margins: 8
+                                    text: (modelData.kind === "blocked" ? "Blocked · "
+                                          : modelData.kind === "warning" ? "Warning · " : "Error · ")
+                                          + modelData.text
+                                    color: Theme.text
+                                    wrapMode: Text.Wrap
+                                }
+                            }
+                        }
+
+                        Text {
+                            Layout.fillWidth: true
+                            visible: controller.compatibilityNotes.length > 0
+                            text: "Details"
+                            color: Theme.text
+                            font.weight: Font.DemiBold
+                            Layout.topMargin: controller.scoreDeductions.length > 0
+                                              || controller.compatibilityIssues.length > 0 ? 4 : 0
+                        }
+
+                        Repeater {
+                            model: controller.compatibilityNotes
+                            delegate: Text {
+                                required property string modelData
+                                Layout.fillWidth: true
+                                text: modelData
+                                color: Theme.textMuted
+                                wrapMode: Text.Wrap
+                            }
                         }
                     }
                 }
