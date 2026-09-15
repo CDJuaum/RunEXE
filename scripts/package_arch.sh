@@ -49,7 +49,7 @@ package() {
   install -d "\$pkgdir/opt/runexe" "\$pkgdir/usr/bin" \
     "\$pkgdir/usr/share/applications" "\$pkgdir/usr/share/icons/hicolor/256x256/apps"
   # The prebuilt bundle sits next to PKGBUILD. makepkg --cleanbuild clears its
-  # own srcdir before package(), so do not stage this source inside $srcdir.
+  # own srcdir before package(), so do not stage this source inside \$srcdir.
   cp -a "\$startdir/runexe/." "\$pkgdir/opt/runexe/"
   ln -s /opt/runexe/runexe "\$pkgdir/usr/bin/runexe"
   ln -s /opt/runexe/runexe-gui "\$pkgdir/usr/bin/runexe-gui"
