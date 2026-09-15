@@ -124,6 +124,9 @@ fi
 
 printf 'Installing RunEXE from %s\n' "$INSTALL_SOURCE"
 printf 'Source: %s\n' "$INSTALL_SPEC"
+if [ "$SOURCE_CHANNEL" = main ] && [ -z "${RUNEXE_INSTALL_SPEC:-}" ]; then
+    "$VENV/bin/python" -m pip uninstall -y runexe >/dev/null 2>&1
+fi
 if ! "$VENV/bin/python" -m pip install --upgrade "$INSTALL_SPEC"; then
     if [ "$WITH_GUI" -eq 1 ]; then
         printf '%s\n' \

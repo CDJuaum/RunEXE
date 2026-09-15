@@ -18,6 +18,8 @@ For a quick test of the current unreleased `main` branch, opt in explicitly:
 curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/refs/heads/main/install.sh | sh -s -- --main
 ```
 
+Rerunning the same `--main` command replaces the installed RunEXE package with the current branch contents even when the package version has not changed. Existing dependencies and user data remain in place, so a separate uninstall is not required between development builds.
+
 Run the host check afterward:
 
 ```bash

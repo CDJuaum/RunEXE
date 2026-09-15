@@ -57,6 +57,8 @@ The installer resolves the latest published GitHub release and installs that tag
 curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/refs/heads/main/install.sh | sh -s -- --main
 ```
 
+Rerunning the `--main` command refreshes the installed RunEXE package even when the unreleased branch still reports the same version number, so testing new `main` changes does not require uninstalling RunEXE first.
+
 Check the Linux host before the first launch:
 
 ```bash
