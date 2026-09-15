@@ -4,7 +4,6 @@
 set -eu
 
 PROJECT_URL="https://github.com/CDJuaum/RunEXE"
-DEFAULT_ARCHIVE="$PROJECT_URL/archive/refs/heads/main.tar.gz"
 DATA_HOME=${XDG_DATA_HOME:-"$HOME/.local/share"}
 INSTALL_ROOT=${RUNEXE_INSTALL_ROOT:-"$DATA_HOME/runexe/app"}
 VENV="$INSTALL_ROOT/venv"
@@ -12,12 +11,14 @@ BIN_DIR=${RUNEXE_BIN_DIR:-"$HOME/.local/bin"}
 PYTHON=${RUNEXE_PYTHON:-python3}
 WITH_GUI=1
 WITH_DESKTOP=1
+SOURCE_CHANNEL=release
 
 usage() {
     printf '%s\n' "Install RunEXE for the current user." "" \
-        "Usage: sh install.sh [--cli-only] [--no-desktop]" "" \
+        "Usage: sh install.sh [--cli-only] [--no-desktop] [--main]" "" \
         "  --cli-only    Install the console interface without Qt." \
         "  --no-desktop  Do not create a desktop-menu entry." \
+        "  --main        Install the current main branch for testing." \
         "  --help        Show this help." "" \
         "Environment overrides:" \
         "  RUNEXE_INSTALL_SPEC  pip requirement or local project path" \
@@ -59,6 +60,9 @@ while [ "$#" -gt 0 ]; do
         --no-desktop)
             WITH_DESKTOP=0
             ;;
+        --main)
+            SOURCE_CHANNEL=main
+            ;;
         --help|-h)
             usage
             exit 0
@@ -78,14 +82,29 @@ command -v "$PYTHON" >/dev/null 2>&1 || \
 "$PYTHON" -c 'import sys; raise SystemExit(sys.version_info < (3, 10))' || \
     fail "$PYTHON must be Python 3.10 or newer."
 
-if [ -z "${RUNEXE_INSTALL_SPEC:-}" ]; then
-    if [ "$WITH_GUI" -eq 1 ]; then
-        INSTALL_SPEC="runexe[gui] @ $DEFAULT_ARCHIVE"
-    else
-        INSTALL_SPEC="runexe @ $DEFAULT_ARCHIVE"
-    fi
-else
+if [ -n "${RUNEXE_INSTALL_SPEC:-}" ]; then
     INSTALL_SPEC=$RUNEXE_INSTALL_SPEC
+    INSTALL_SOURCE="custom install spec"
+else
+    if [ "$SOURCE_CHANNEL" = main ]; then
+        ARCHIVE_URL="$PROJECT_URL/archive/refs/heads/main.tar.gz"
+        INSTALL_SOURCE="main branch"
+    else
+        command -v curl >/dev/null 2>&1 || fail "curl is required to resolve the latest RunEXE release."
+        latest_url=$(curl -fsSL -o /dev/null -w '%{url_effective}' "$PROJECT_URL/releases/latest") || \
+            fail "could not resolve the latest published RunEXE release."
+        RELEASE_TAG=${latest_url##*/}
+        case "$RELEASE_TAG" in
+            ''|*[!A-Za-z0-9._-]*) fail "invalid release tag: $RELEASE_TAG" ;;
+        esac
+        ARCHIVE_URL="$PROJECT_URL/archive/refs/tags/$RELEASE_TAG.tar.gz"
+        INSTALL_SOURCE="release $RELEASE_TAG"
+    fi
+    if [ "$WITH_GUI" -eq 1 ]; then
+        INSTALL_SPEC="runexe[gui] @ $ARCHIVE_URL"
+    else
+        INSTALL_SPEC="runexe @ $ARCHIVE_URL"
+    fi
 fi
 
 for command_name in runexe runexe-gui; do
@@ -103,7 +122,8 @@ if ! "$PYTHON" -m venv "$VENV"; then
     fail "could not create a virtual environment. Install your distribution's python3-venv package."
 fi
 
-printf 'Installing RunEXE from %s\n' "$INSTALL_SPEC"
+printf 'Installing RunEXE from %s\n' "$INSTALL_SOURCE"
+printf 'Source: %s\n' "$INSTALL_SPEC"
 if ! "$VENV/bin/python" -m pip install --upgrade "$INSTALL_SPEC"; then
     if [ "$WITH_GUI" -eq 1 ]; then
         printf '%s\n' \
@@ -138,6 +158,10 @@ case ":${PATH:-}:" in
     *) printf 'Add %s to PATH, then open a new terminal.\n' "$BIN_DIR" ;;
 esac
 printf 'Next: %s/runexe doctor\n' "$BIN_DIR"
-printf 'Update: run this installer again.\n'
+if [ "$SOURCE_CHANNEL" = main ] && [ -z "${RUNEXE_INSTALL_SPEC:-}" ]; then
+    printf 'Update: rerun this installer with --main.\n'
+else
+    printf 'Update: run this installer again.\n'
+fi
 printf '%s\n' \
     'Uninstall: curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/main/uninstall.sh | sh'

@@ -10,7 +10,13 @@ Install RunEXE for the current user without changing the system Python or using 
 curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/main/install.sh | sh
 ```
 
-The installer creates an isolated application environment under `$XDG_DATA_HOME/runexe/app`, exposes `runexe` and `runexe-gui` through `~/.local/bin`, and adds RunEXE to the desktop application menu.
+The installer resolves the latest published GitHub release and installs that tagged source. Changes on `main` therefore do not reach normal installs until they are released. It creates an isolated application environment under `$XDG_DATA_HOME/runexe/app`, exposes `runexe` and `runexe-gui` through `~/.local/bin`, and adds RunEXE to the desktop application menu.
+
+For a quick test of the current unreleased `main` branch, opt in explicitly:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/main/install.sh | sh -s -- --main
+```
 
 Run the host check afterward:
 
