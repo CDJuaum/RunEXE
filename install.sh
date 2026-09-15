@@ -51,6 +51,76 @@ validate_install_root() {
     esac
 }
 
+stop_running_runexe() {
+    [ -d /proc ] || return 0
+    "$PYTHON" - "$VENV/bin/runexe" "$VENV/bin/runexe-gui" \
+        "$BIN_DIR/runexe" "$BIN_DIR/runexe-gui" <<'PY'
+import os
+import signal
+import sys
+import time
+
+target_paths = set(sys.argv[1:])
+target_realpaths = {os.path.realpath(path) for path in target_paths}
+current_pid = os.getpid()
+parent_pid = os.getppid()
+matches = []
+
+for entry in os.listdir("/proc"):
+    if not entry.isdigit():
+        continue
+    pid = int(entry)
+    if pid in {current_pid, parent_pid}:
+        continue
+    try:
+        raw = open(f"/proc/{pid}/cmdline", "rb").read()
+    except OSError:
+        continue
+    args = [part.decode(errors="surrogateescape") for part in raw.split(b"\0") if part]
+    for arg in args:
+        if arg in target_paths:
+            matches.append(pid)
+            break
+        if os.path.isabs(arg) and os.path.basename(arg) in {"runexe", "runexe-gui"}:
+            if os.path.realpath(arg) in target_realpaths:
+                matches.append(pid)
+                break
+
+if not matches:
+    raise SystemExit(0)
+
+print("Stopping running RunEXE process(es): " + ", ".join(map(str, matches)))
+for pid in matches:
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    except PermissionError as error:
+        raise SystemExit(f"could not stop RunEXE process {pid}: {error}") from error
+
+deadline = time.monotonic() + 5.0
+remaining = set(matches)
+while remaining and time.monotonic() < deadline:
+    for pid in tuple(remaining):
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            remaining.discard(pid)
+        except PermissionError:
+            remaining.discard(pid)
+    if remaining:
+        time.sleep(0.1)
+
+for pid in remaining:
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    except PermissionError as error:
+        raise SystemExit(f"could not force-close RunEXE process {pid}: {error}") from error
+PY
+}
+
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --cli-only)
@@ -81,6 +151,7 @@ command -v "$PYTHON" >/dev/null 2>&1 || \
     fail "$PYTHON was not found. Install Python 3.10 or newer first."
 "$PYTHON" -c 'import sys; raise SystemExit(sys.version_info < (3, 10))' || \
     fail "$PYTHON must be Python 3.10 or newer."
+stop_running_runexe
 
 if [ -n "${RUNEXE_INSTALL_SPEC:-}" ]; then
     INSTALL_SPEC=$RUNEXE_INSTALL_SPEC

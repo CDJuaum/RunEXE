@@ -20,6 +20,8 @@ curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/refs/heads/main/inst
 
 Rerunning the same `--main` command replaces the installed RunEXE package with the current branch contents even when the package version has not changed. Existing dependencies and user data remain in place, so a separate uninstall is not required between development builds.
 
+If RunEXE itself is open when the installer starts, the installer detects the running RunEXE process, asks it to terminate, and force-closes it only if it does not exit within a few seconds. Windows applications launched through RunEXE are not targeted by this check.
+
 Run the host check afterward:
 
 ```bash
