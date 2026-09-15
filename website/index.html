@@ -3,24 +3,101 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="RunEXE analyzes Windows apps and launches them on Linux with the right Wine or Proton runtime.">
-  <meta name="theme-color" content="#0b0d10">
-  <title>RunEXE — Windows apps, made clearer on Linux</title>
-  <link rel="icon" href="assets/runexe-logo.png" type="image/png">
-  <link rel="stylesheet" href="styles.css">
+  <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">
+  <meta name="description" content="Run Windows EXE apps on Linux with RunEXE, an open-source Wine and Proton frontend that analyzes compatibility, chooses runtimes, and isolates each app.">
+  <meta name="theme-color" content="#0a0c0f">
+  <meta name="application-name" content="RunEXE">
+  <meta name="apple-mobile-web-app-title" content="RunEXE">
+  <link rel="canonical" href="https://runexe.rrmtools.uk/">
+  <link rel="icon" href="/assets/runexe-logo.png" type="image/png">
+  <link rel="apple-touch-icon" href="/assets/runexe-logo.png">
+  <link rel="stylesheet" href="/styles.css?v=1.0.0">
+
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="RunEXE">
+  <meta property="og:title" content="RunEXE — Run Windows EXE apps on Linux with Wine & Proton">
+  <meta property="og:description" content="Analyze Windows software, choose Wine or Proton automatically, manage isolated environments, and launch with a native Linux desktop app or CLI.">
+  <meta property="og:url" content="https://runexe.rrmtools.uk/">
+  <meta property="og:image" content="https://runexe.rrmtools.uk/assets/runexe-gui.png">
+  <meta property="og:image:alt" content="RunEXE Linux desktop interface showing Windows application compatibility and runtime controls">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="RunEXE — Run Windows apps on Linux with Wine & Proton">
+  <meta name="twitter:description" content="Open-source Linux frontend for analyzing and launching Windows software through Wine or Proton.">
+  <meta name="twitter:image" content="https://runexe.rrmtools.uk/assets/runexe-gui.png">
+
+  <title>RunEXE — Run Windows EXE apps on Linux with Wine & Proton</title>
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "SoftwareApplication",
+        "@id": "https://runexe.rrmtools.uk/#app",
+        "name": "RunEXE",
+        "url": "https://runexe.rrmtools.uk/",
+        "description": "Open-source Linux desktop application and CLI for analyzing Windows software and launching it with Wine or Proton.",
+        "applicationCategory": "UtilitiesApplication",
+        "operatingSystem": "Linux",
+        "softwareVersion": "1.0.0",
+        "isAccessibleForFree": true,
+        "license": "https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html",
+        "downloadUrl": "https://github.com/CDJuaum/RunEXE/releases/latest",
+        "installUrl": "https://runexe.rrmtools.uk/#download",
+        "releaseNotes": "https://github.com/CDJuaum/RunEXE/blob/main/CHANGELOG.md",
+        "screenshot": "https://runexe.rrmtools.uk/assets/runexe-gui.png",
+        "processorRequirements": "x86-64 for official desktop binaries",
+        "softwareRequirements": "Wine, Proton, or both are required to run Windows applications",
+        "featureList": [
+          "PE and AppX/MSIX analysis",
+          "Automatic Wine or Proton selection",
+          "Isolated per-application environments",
+          "Dependency and compatibility reporting",
+          "Managed GE-Proton installation",
+          "Vulkan and DXVK readiness checks",
+          "Qt Quick desktop interface and CLI"
+        ],
+        "sameAs": ["https://github.com/CDJuaum/RunEXE"],
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "EUR",
+          "availability": "https://schema.org/InStock"
+        },
+        "author": {
+          "@type": "Organization",
+          "name": "RunEXE contributors",
+          "url": "https://github.com/CDJuaum/RunEXE"
+        }
+      },
+      {
+        "@type": "WebSite",
+        "@id": "https://runexe.rrmtools.uk/#website",
+        "url": "https://runexe.rrmtools.uk/",
+        "name": "RunEXE",
+        "description": "Official website for RunEXE, an open-source Wine and Proton frontend for Linux.",
+        "inLanguage": "en"
+      }
+    ]
+  }
+  </script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
+
   <header class="site-header">
     <div class="shell nav-shell">
       <a class="brand" href="/" aria-label="RunEXE home">
-        <img src="assets/runexe-logo.png" alt="" width="34" height="34">
+        <img src="/assets/runexe-logo.png" alt="" width="34" height="34">
         <span>RunEXE</span>
+        <span class="version-pill">1.0</span>
       </a>
       <nav aria-label="Primary navigation">
+        <a href="#how-it-works">How it works</a>
         <a href="#features">Features</a>
-        <a href="#downloads">Download</a>
-        <a href="https://github.com/CDJuaum/RunEXE" rel="noreferrer">GitHub</a>
+        <a href="#download">Download</a>
+        <a href="/guide">Guide</a>
+        <a class="nav-github" href="https://github.com/CDJuaum/RunEXE" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a>
       </nav>
     </div>
   </header>
@@ -28,142 +105,279 @@
   <main id="main">
     <section class="hero shell">
       <div class="hero-copy">
-        <div class="eyebrow"><span class="status-dot"></span> Open source · Linux · LGPL-2.1</div>
-        <h1>Windows apps on Linux, without the guesswork.</h1>
-        <p class="hero-lead">RunEXE inspects Windows software before launch, picks the best available Wine or Proton runtime, and keeps each app in its own managed environment.</p>
+        <div class="eyebrow"><span class="status-dot"></span> Open source · Linux · v1.0</div>
+        <h1>Run Windows apps on Linux with less trial and error.</h1>
+        <p class="hero-lead">RunEXE is a native Linux frontend for Wine and Proton. It inspects Windows executables before launch, explains likely requirements, chooses a runtime, and keeps each app in its own managed environment.</p>
         <div class="hero-actions">
-          <a class="button button-primary" href="#downloads">Download RunEXE</a>
-          <a class="button button-secondary" href="https://github.com/CDJuaum/RunEXE" rel="noreferrer">View source <span aria-hidden="true">↗</span></a>
+          <a class="button button-primary" href="#download">Download RunEXE</a>
+          <a class="button button-secondary" href="/guide">How to run an EXE on Linux</a>
         </div>
-        <div class="quick-install" aria-label="Quick install command">
+        <div class="install-line" aria-label="Quick install command">
+          <span class="prompt">$</span>
           <code>curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/main/install.sh | sh</code>
-          <span>user install</span>
+          <span class="install-label">user install</span>
         </div>
+        <p class="hero-note">No account. No analytics. No bundled Wine build. Your Windows apps and RunEXE state stay on your machine.</p>
       </div>
 
-      <div class="app-frame" aria-label="RunEXE desktop application preview">
-        <div class="window-bar">
-          <div class="window-dots" aria-hidden="true"><i></i><i></i><i></i></div>
-          <span>RunEXE</span>
-          <span class="window-meta">Linux desktop</span>
+      <div class="hero-visual">
+        <div class="app-frame" aria-label="RunEXE desktop application preview">
+          <div class="window-bar">
+            <div class="window-dots" aria-hidden="true"><i></i><i></i><i></i></div>
+            <span>RunEXE</span>
+            <span class="window-meta">Linux desktop</span>
+          </div>
+          <img src="/assets/runexe-gui.png" alt="RunEXE desktop interface showing Windows application readiness and Wine or Proton runtime controls">
         </div>
-        <img src="assets/runexe-gui.png" alt="RunEXE desktop interface showing application readiness and runtime controls">
+        <div class="visual-caption">
+          <span>Desktop</span>
+          <strong>Qt Quick / QML</strong>
+          <span>CLI included</span>
+        </div>
       </div>
     </section>
 
-    <section class="signal-strip" aria-label="RunEXE highlights">
-      <div class="shell signal-grid">
-        <div><strong>Wine + Proton</strong><span>automatic runtime selection</span></div>
-        <div><strong>Isolated</strong><span>per-app environments</span></div>
-        <div><strong>Explainable</strong><span>readiness and dependency reports</span></div>
-        <div><strong>Native Linux</strong><span>Qt Quick desktop + CLI</span></div>
+    <section class="trust-strip" aria-label="RunEXE highlights">
+      <div class="shell trust-grid">
+        <div><span class="trust-label">Backends</span><strong>Wine + Proton</strong></div>
+        <div><span class="trust-label">Packages</span><strong>EXE · AppX · MSIX</strong></div>
+        <div><span class="trust-label">Linux packages</span><strong>DEB · RPM · Arch</strong></div>
+        <div><span class="trust-label">License</span><strong>LGPL-2.1</strong></div>
+      </div>
+    </section>
+
+    <section class="section shell problem-section" id="how-it-works">
+      <div class="section-index">01 / Workflow</div>
+      <div class="section-heading heading-grid">
+        <div>
+          <p class="kicker">Before you double-click</p>
+          <h2>RunEXE turns an unknown Windows app into a launch plan.</h2>
+        </div>
+        <p>Wine can run a lot of Windows software, but getting from “I have an EXE” to the right prefix, runtime, dependencies, and graphics path is often the hard part. RunEXE puts those decisions in one place and keeps them inspectable.</p>
+      </div>
+
+      <div class="workflow-grid">
+        <article class="workflow-step">
+          <span class="step-number">01</span>
+          <div>
+            <h3>Inspect the file</h3>
+            <p>Read architecture, imports, manifests, version data, .NET requirements, DirectX signals, and AppX/MSIX metadata without launching it.</p>
+          </div>
+        </article>
+        <article class="workflow-step">
+          <span class="step-number">02</span>
+          <div>
+            <h3>Match the host</h3>
+            <p>Check Wine, Proton, Winetricks, Vulkan, GPU readiness, Qt libraries, and the current Linux distribution before setup begins.</p>
+          </div>
+        </article>
+        <article class="workflow-step">
+          <span class="step-number">03</span>
+          <div>
+            <h3>Choose a runtime</h3>
+            <p>Prefer Wine for regular desktop apps and Proton for games when that makes sense, while keeping every choice manually overrideable.</p>
+          </div>
+        </article>
+        <article class="workflow-step">
+          <span class="step-number">04</span>
+          <div>
+            <h3>Launch in isolation</h3>
+            <p>Create or reuse a per-app environment, install known dependencies when requested, and keep launch presets and backups scoped to that app.</p>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="analysis-band">
+      <div class="shell analysis-layout">
+        <div class="analysis-copy">
+          <p class="kicker">Readable diagnostics</p>
+          <h2>Compatibility information you can act on.</h2>
+          <p>RunEXE does not claim to predict whether every Windows program will work. It shows the evidence it can observe locally and tells you what changed the recommendation.</p>
+          <a class="text-link" href="https://github.com/CDJuaum/RunEXE#usage" rel="noreferrer">See CLI examples <span aria-hidden="true">↗</span></a>
+        </div>
+        <div class="terminal-card" aria-label="Example RunEXE analysis output">
+          <div class="terminal-title"><span>runexe analyze paintdotnet.exe</span><span>read-only</span></div>
+          <div class="terminal-row"><span>Application</span><strong>Paint.NET installer</strong></div>
+          <div class="terminal-row"><span>Architecture</span><strong>x86_64</strong></div>
+          <div class="terminal-row"><span>Backend</span><strong>Wine</strong></div>
+          <div class="terminal-row"><span>Windows</span><strong>Windows 11 profile</strong></div>
+          <div class="terminal-row"><span>Dependency</span><strong>.NET Framework 4.7.2</strong></div>
+          <div class="terminal-row"><span>Graphics</span><strong>Direct2D / Vulkan checked</strong></div>
+          <div class="terminal-result"><span class="status-dot"></span> Actionable compatibility report ready</div>
+        </div>
       </div>
     </section>
 
     <section class="section shell" id="features">
-      <div class="section-heading">
-        <p class="kicker">Designed for the part before “Run”</p>
-        <h2>Know what an app needs before it fails.</h2>
-        <p>RunEXE turns PE metadata, host capabilities, runtimes, and known Windows dependencies into a launch plan you can inspect.</p>
+      <div class="section-index">02 / Capabilities</div>
+      <div class="section-heading heading-grid">
+        <div>
+          <p class="kicker">Built around real Linux workflows</p>
+          <h2>A frontend for the messy parts around Wine and Proton.</h2>
+        </div>
+        <p>The desktop app and CLI share the same backend services, so analysis, runtime selection, environments, backups, and diagnostics behave consistently whichever interface you prefer.</p>
       </div>
 
-      <div class="feature-grid">
-        <article class="feature feature-wide">
-          <div class="feature-number">01</div>
-          <h3>Analyze first</h3>
-          <p>Inspect architecture, imports, .NET requirements, manifests, AppX/MSIX metadata, DirectX signals, and compatibility risks without launching the executable.</p>
-          <div class="code-card" aria-label="Example RunEXE analysis output">
-            <div><span class="muted">$</span> runexe analyze paintdotnet.exe</div>
-            <div><span class="label">Architecture</span><span>x86_64</span></div>
-            <div><span class="label">Runtime</span><span>Wine · Windows 10</span></div>
-            <div><span class="label">Dependency</span><span>.NET Framework 4.7.2</span></div>
-            <div><span class="label">Readiness</span><span class="good">Actionable report ready</span></div>
-          </div>
+      <div class="capability-grid">
+        <article class="capability capability-main">
+          <span class="capability-tag">Analysis</span>
+          <h3>Understand the executable before running it.</h3>
+          <p>Bounded PE parsing, imports, manifests, version information, architecture, .NET detection, anti-cheat signals, AppX/MSIX inspection, and JSON output for automation.</p>
+          <div class="capability-list"><span>PE metadata</span><span>.NET / CLR</span><span>DirectX</span><span>AppX/MSIX</span></div>
         </article>
-
-        <article class="feature">
-          <div class="feature-number">02</div>
-          <h3>Choose the runtime</h3>
-          <p>Games can prefer Proton while regular apps prefer Wine. Override the decision whenever you know better.</p>
+        <article class="capability">
+          <span class="capability-tag">Runtime</span>
+          <h3>Wine or Proton, with reasons.</h3>
+          <p>Discover installed runtimes, prefer a sensible backend, select Proton builds, or install a managed GE-Proton release without root.</p>
         </article>
-
-        <article class="feature">
-          <div class="feature-number">03</div>
-          <h3>Keep apps separated</h3>
-          <p>Managed prefixes, backups, runtime settings, and per-app launch presets stay isolated instead of becoming one fragile global setup.</p>
+        <article class="capability">
+          <span class="capability-tag">Environments</span>
+          <h3>One app, one managed setup.</h3>
+          <p>Per-app prefixes and compat data, saved launch choices, disk usage, native Wine tools, guarded cleanup, and restorable backups.</p>
         </article>
-
-        <article class="feature">
-          <div class="feature-number">04</div>
-          <h3>Debug with context</h3>
-          <p>Live process output, host diagnostics, Vulkan checks, dependency guidance, and exportable support reports keep failures understandable.</p>
+        <article class="capability">
+          <span class="capability-tag">Graphics</span>
+          <h3>See the DirectX path.</h3>
+          <p>Probe Vulkan readiness, GPU vendors, DXVK state, likely DirectX translation, and optional diagnostic tuning for Proton.</p>
+        </article>
+        <article class="capability">
+          <span class="capability-tag">Support</span>
+          <h3>Keep failures debuggable.</h3>
+          <p>Live process output, host diagnostics, completion notifications, activity history, and exportable JSON support reports.</p>
         </article>
       </div>
     </section>
 
-    <section class="section downloads-section" id="downloads">
+    <section class="section compare-section">
+      <div class="shell compare-layout">
+        <div>
+          <div class="section-index">03 / Positioning</div>
+          <p class="kicker">What RunEXE is for</p>
+          <h2>Use it when you want control without rebuilding the same Wine setup by hand.</h2>
+        </div>
+        <div class="compare-table" role="table" aria-label="RunEXE use cases">
+          <div class="compare-row compare-head" role="row"><span role="columnheader">Task</span><span role="columnheader">RunEXE approach</span></div>
+          <div class="compare-row" role="row"><span role="cell">Run a random EXE</span><span role="cell">Analyze first, then build a launch plan</span></div>
+          <div class="compare-row" role="row"><span role="cell">Choose Wine vs Proton</span><span role="cell">Automatic recommendation with explicit override</span></div>
+          <div class="compare-row" role="row"><span role="cell">Keep prefixes tidy</span><span role="cell">Stable per-application managed environments</span></div>
+          <div class="compare-row" role="row"><span role="cell">Install common Windows runtimes</span><span role="cell">Known Winetricks dependencies can be provisioned</span></div>
+          <div class="compare-row" role="row"><span role="cell">Debug a failure</span><span role="cell">Host checks, live logs, graphics readiness, support export</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section download-section" id="download">
       <div class="shell">
-        <div class="section-heading split-heading">
+        <div class="section-index">04 / Install</div>
+        <div class="section-heading heading-grid">
           <div>
-            <p class="kicker">Native packages</p>
-            <h2>Install it the way your distro expects.</h2>
+            <p class="kicker">RunEXE 1.0</p>
+            <h2>Install it the way your Linux distribution expects.</h2>
           </div>
-          <a class="text-link" href="https://github.com/CDJuaum/RunEXE/releases/latest" rel="noreferrer">Latest release <span aria-hidden="true">↗</span></a>
+          <p>Official x86-64 desktop releases bundle RunEXE, Python, and Qt. Wine, Proton, graphics drivers, and the host display stack stay native to your system.</p>
         </div>
 
         <div class="download-grid">
           <a class="download-card" href="https://github.com/CDJuaum/RunEXE/releases/latest" rel="noreferrer">
             <span class="distro-mark">A</span>
-            <div><strong>Arch Linux</strong><span>pacman · .pkg.tar.zst</span></div>
+            <div><strong>Arch Linux / Manjaro</strong><span>pacman package · .pkg.tar.zst</span></div>
             <span class="arrow" aria-hidden="true">↗</span>
           </a>
           <a class="download-card" href="https://github.com/CDJuaum/RunEXE/releases/latest" rel="noreferrer">
             <span class="distro-mark">D</span>
-            <div><strong>Debian / Ubuntu</strong><span>apt · .deb</span></div>
+            <div><strong>Debian / Ubuntu / Kali</strong><span>native package · .deb</span></div>
             <span class="arrow" aria-hidden="true">↗</span>
           </a>
           <a class="download-card" href="https://github.com/CDJuaum/RunEXE/releases/latest" rel="noreferrer">
             <span class="distro-mark">F</span>
-            <div><strong>Fedora</strong><span>dnf · .rpm</span></div>
+            <div><strong>Fedora / RPM systems</strong><span>native package · .rpm</span></div>
             <span class="arrow" aria-hidden="true">↗</span>
           </a>
           <a class="download-card" href="https://github.com/CDJuaum/RunEXE/releases/latest" rel="noreferrer">
-            <span class="distro-mark">•</span>
-            <div><strong>Portable</strong><span>glibc / musl · .tar.gz</span></div>
+            <span class="distro-mark">P</span>
+            <div><strong>Portable Linux</strong><span>glibc desktop / musl CLI · .tar.gz</span></div>
             <span class="arrow" aria-hidden="true">↗</span>
           </a>
         </div>
 
-        <div class="requirements">
-          <div><span>01</span><p><strong>Linux x86-64</strong> for official desktop binaries.</p></div>
-          <div><span>02</span><p><strong>Wine, Proton, or both</strong> for running Windows software.</p></div>
-          <div><span>03</span><p><strong>Graphics drivers stay native.</strong> RunEXE does not bundle your GPU stack.</p></div>
+        <div class="install-options">
+          <div class="install-option install-option-wide">
+            <span class="option-label">Recommended user install</span>
+            <code>curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/main/install.sh | sh</code>
+          </div>
+          <div class="install-option"><span class="option-label">First check</span><code>runexe doctor</code></div>
+          <div class="install-option"><span class="option-label">Desktop</span><code>runexe-gui</code></div>
+          <div class="install-option"><span class="option-label">CLI</span><code>runexe run app.exe</code></div>
+        </div>
+
+        <div class="download-foot">
+          <p><strong>Need the details?</strong> The README covers package choices and the full installation guide documents distro prerequisites, Wayland/X11, pipx, and custom runtime paths.</p>
+          <div><a class="text-link" href="https://github.com/CDJuaum/RunEXE#install" rel="noreferrer">README <span aria-hidden="true">↗</span></a><a class="text-link" href="https://github.com/CDJuaum/RunEXE/blob/main/docs/installation.md" rel="noreferrer">Installation guide <span aria-hidden="true">↗</span></a></div>
         </div>
       </div>
     </section>
 
-    <section class="section shell closing-section">
-      <div>
-        <p class="kicker">Built in the open</p>
-        <h2>A compatibility frontend you can inspect.</h2>
+    <section class="section shell faq-section" id="faq">
+      <div class="section-index">05 / FAQ</div>
+      <div class="faq-layout">
+        <div>
+          <p class="kicker">Common questions</p>
+          <h2>Before you install.</h2>
+        </div>
+        <div class="faq-list">
+          <details open>
+            <summary>Does RunEXE replace Wine or Proton?</summary>
+            <p>No. RunEXE is a frontend and management layer. It analyzes the Windows software, discovers or installs compatible runtimes, prepares isolated environments, and launches through Wine or Proton.</p>
+          </details>
+          <details>
+            <summary>Can RunEXE run any Windows EXE on Linux?</summary>
+            <p>No compatibility frontend can guarantee that. Windows APIs, drivers, anti-cheat, DRM, GPU support, and application-specific assumptions still matter. RunEXE aims to make the local compatibility evidence and failure path clearer.</p>
+          </details>
+          <details>
+            <summary>Does analysis run the executable?</summary>
+            <p>No. <code>runexe analyze</code> performs bounded, read-only inspection and can run without Wine. Launching or preparing an environment is a separate action.</p>
+          </details>
+          <details>
+            <summary>What Linux distributions are supported?</summary>
+            <p>Official desktop packages target x86-64 Arch, Debian/Ubuntu-family systems, Fedora/RPM systems, and portable glibc Linux. The CLI also has a musl build for Alpine. RunEXE understands additional package-manager families for host guidance.</p>
+          </details>
+          <details>
+            <summary>Is RunEXE a sandbox?</summary>
+            <p>No. Wine and Proton are compatibility layers, not security sandboxes. Only run software you trust, and use a VM or dedicated sandbox for untrusted executables.</p>
+          </details>
+        </div>
       </div>
-      <div class="closing-copy">
-        <p>RunEXE is LGPL-2.1 licensed. Analysis is read-only, launch decisions are visible, and the project does not pretend Wine compatibility is a guarantee.</p>
-        <a class="button button-secondary" href="https://github.com/CDJuaum/RunEXE" rel="noreferrer">Explore the repository <span aria-hidden="true">↗</span></a>
+    </section>
+
+    <section class="closing-section">
+      <div class="shell closing-layout">
+        <div>
+          <p class="kicker">Built in the open</p>
+          <h2>Open-source Windows compatibility tooling for Linux.</h2>
+        </div>
+        <div class="closing-copy">
+          <p>RunEXE is LGPL-2.1 licensed. The source, release workflow, compatibility logic, and issue tracker are public, and the project does not require an account or send local application state to this website.</p>
+          <div class="closing-actions">
+            <a class="button button-primary" href="https://github.com/CDJuaum/RunEXE/releases/latest" rel="noreferrer">Get RunEXE 1.0 <span aria-hidden="true">↗</span></a>
+            <a class="button button-secondary" href="https://github.com/CDJuaum/RunEXE" rel="noreferrer">Browse source <span aria-hidden="true">↗</span></a>
+          </div>
+        </div>
       </div>
     </section>
   </main>
 
   <footer class="site-footer">
     <div class="shell footer-grid">
-      <div class="brand footer-brand"><img src="assets/runexe-logo.png" alt="" width="30" height="30"><span>RunEXE</span></div>
-      <p>Open-source Windows compatibility tooling for Linux.</p>
-      <div class="footer-links">
-        <a href="privacy.html">Privacy & cookies</a>
-        <a href="https://github.com/CDJuaum/RunEXE/issues" rel="noreferrer">Support</a>
-        <a href="https://github.com/CDJuaum/RunEXE/blob/main/LICENSE" rel="noreferrer">License</a>
+      <div class="footer-brand-wrap">
+        <div class="brand footer-brand"><img src="/assets/runexe-logo.png" alt="" width="30" height="30"><span>RunEXE</span></div>
+        <p>Run Windows software on Linux through a clearer Wine and Proton workflow.</p>
       </div>
+      <div class="footer-column"><strong>Project</strong><a href="https://github.com/CDJuaum/RunEXE" rel="noreferrer">GitHub</a><a href="https://github.com/CDJuaum/RunEXE/releases/latest" rel="noreferrer">Releases</a><a href="https://github.com/CDJuaum/RunEXE/issues" rel="noreferrer">Issues</a></div>
+      <div class="footer-column"><strong>Learn</strong><a href="/guide">Run EXE files on Linux</a><a href="https://github.com/CDJuaum/RunEXE#usage" rel="noreferrer">Usage</a><a href="https://github.com/CDJuaum/RunEXE/blob/main/CHANGELOG.md" rel="noreferrer">Changelog</a></div>
+      <div class="footer-column"><strong>Legal</strong><a href="/privacy">Privacy & cookies</a><a href="https://github.com/CDJuaum/RunEXE/blob/main/LICENSE" rel="noreferrer">LGPL-2.1 license</a></div>
     </div>
+    <div class="shell footer-bottom"><span>RunEXE 1.0</span><span>No tracking · No account · Open source</span></div>
   </footer>
 </body>
 </html>

@@ -1,6 +1,6 @@
 [project]
 name = "runexe"
-version = "0.9.4"
+version = "1.0.0"
 description = "Analyze and run Windows software on Linux with a desktop GUI or CLI"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -8,7 +8,7 @@ license = "LGPL-2.1-only"
 authors = [{name = "RunEXE contributors"}]
 keywords = ["wine", "proton", "windows", "linux", "pe", "gui", "executable"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "Environment :: X11 Applications :: Qt",
     "Intended Audience :: End Users/Desktop",
@@ -36,8 +36,11 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/cdjuaum/runexe"
-Issues = "https://github.com/cdjuaum/runexe/issues"
+Homepage = "https://runexe.rrmtools.uk/"
+Documentation = "https://github.com/CDJuaum/RunEXE#documentation"
+Source = "https://github.com/CDJuaum/RunEXE"
+Changelog = "https://github.com/CDJuaum/RunEXE/blob/main/CHANGELOG.md"
+Issues = "https://github.com/CDJuaum/RunEXE/issues"
 
 [project.scripts]
 runexe = "runexe.cli:main"

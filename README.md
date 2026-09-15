@@ -1,535 +1,250 @@
 # RunEXE
 
-Analyze Windows software and launch it on Linux through the best available Wine or Proton runtime,
-from a scalable desktop application or the full command-line interface.
+Analyze Windows software and run it on Linux through Wine or Proton, from a native Qt desktop app or a full command-line interface.
 
 <p align="center">
-  <img src="assets/runexe-logo-v2.png" alt="RunEXE terminal-to-launch logo" width="360">
+  <img src="assets/runexe-logo-v2.png" alt="RunEXE logo" width="340">
 </p>
-
-![Python](https://img.shields.io/badge/python-3.10%2B-blue) ![License](https://img.shields.io/badge/license-LGPL--2.1-green) ![Status](https://img.shields.io/badge/status-alpha-orange)
-
-See the detailed [changelog](CHANGELOG.md) for the latest release notes.
-
-RunEXE inspects PE executables and AppX/MSIX packages before launch, reports likely compatibility concerns, discovers installed Wine and Proton runtimes, and creates an isolated per-application environment. Games prefer Proton when it is available; ordinary applications prefer Wine, with explicit overrides for either backend.
-
-## Desktop interface
 
 <p align="center">
-  <img src="assets/runexe-gui.png" alt="RunEXE desktop overview" width="900">
+  <a href="https://github.com/CDJuaum/RunEXE/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/CDJuaum/RunEXE"></a>
+  <a href="https://github.com/CDJuaum/RunEXE/actions/workflows/release-linux.yml"><img alt="Linux release workflow" src="https://github.com/CDJuaum/RunEXE/actions/workflows/release-linux.yml/badge.svg"></a>
+  <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-blue">
+  <img alt="License LGPL-2.1" src="https://img.shields.io/badge/license-LGPL--2.1-green">
+  <img alt="Status stable" src="https://img.shields.io/badge/status-stable-brightgreen">
 </p>
 
-The Qt Quick/QML desktop application follows KDE's desktop layout conventions with a focused,
-responsive RunEXE theme. See the [UI design notes](docs/desktop-ui.md). It includes:
+<p align="center">
+  <a href="https://runexe.rrmtools.uk/">Website</a> ·
+  <a href="https://github.com/CDJuaum/RunEXE/releases/latest">Latest release</a> ·
+  <a href="#quick-start">Quick start</a> ·
+  <a href="#documentation">Documentation</a> ·
+  <a href="CHANGELOG.md">Changelog</a> ·
+  <a href="https://github.com/CDJuaum/RunEXE/issues">Issues</a>
+</p>
 
-- A responsive sidebar workspace with focused pages for launch setup, runtimes, apps,
-  environments, backups, and activity
-- Background analysis and environment preparation, so the window stays responsive
-- Automatic Wine/Proton selection with manual overrides when needed
-- One-click isolated environment preparation and native Wine/Proton settings
-- Persistent runtime preferences, keyboard shortcuts, and an in-app activity log
-- A recent-application library that restores each app's own launch choices
-- Managed-environment disk usage, folder access, and guarded cleanup
-- Exportable JSON support reports for troubleshooting
-- Live application output without blocking the interface
-- Consistent desktop colors and fonts, lightweight page transitions, mouse-friendly
-  scrollbars, and direct touchpad scrolling
-- Compatibility presets that detect known requirements such as Paint.NET's minimum Windows build
+RunEXE inspects PE executables and AppX/MSIX packages before launch, reports likely compatibility requirements, discovers installed Wine and Proton runtimes, and creates isolated per-application environments. Games can prefer Proton, ordinary applications can prefer Wine, and every automatic choice remains overrideable.
 
-Install the optional desktop dependencies and open it with either entry point:
+## Desktop app
 
-```bash
-python -m pip install -e '.[gui]'
-runexe-gui
-# or
-runexe gui
-```
+<p align="center">
+  <img src="assets/runexe-gui.png" alt="RunEXE desktop interface showing application readiness and runtime controls" width="920">
+</p>
 
-Before the first launch, `runexe doctor` checks the active distribution, libc,
-package manager, Wine/Proton, graphical session, PySide6 plugins, and missing Qt
-shared libraries. It is read-only and prints copy/paste repair commands for the
-detected distribution.
+The desktop interface is built with Qt Quick/QML and uses the same analysis, runtime, environment, and launch services as the CLI. It provides focused pages for launch setup, runtimes, applications, environments, backups, and activity without maintaining a separate compatibility implementation.
 
-Open and analyze a file immediately:
+## Why RunEXE
 
-```bash
-runexe-gui path/to/app.exe
-# or
-runexe gui path/to/app.exe
-```
+- **Analyze before launch.** Inspect architecture, imports, manifests, version data, .NET requirements, DirectX signals, AppX/MSIX metadata, and known compatibility patterns without executing the file.
+- **Choose Wine or Proton with context.** Discover installed runtimes, prefer a sensible backend, select Proton builds explicitly, or install a managed GE-Proton release without root.
+- **Keep applications isolated.** Stable per-app Wine prefixes or Proton compat-data directories preserve launch choices without turning one global prefix into a dependency tangle.
+- **Provision known dependencies.** Detect common Windows runtimes and use Winetricks for supported Wine-side dependencies when requested.
+- **Understand graphics readiness.** Report Vulkan availability, detected GPUs, likely DirectX translation paths, and DXVK state where available.
+- **Manage environments safely.** Inspect disk use, open native Wine tools, create backups, restore snapshots, and remove only validated RunEXE-managed paths.
+- **Keep failures debuggable.** Live process output, host diagnostics, notifications, activity history, JSON output, and exportable support reports make runtime problems easier to inspect.
 
-The GUI is intentionally a client of the same tested analysis and runtime services as the CLI;
-it does not maintain a separate Wine or Proton implementation.
+## Quick start
 
-## ✅ Tested Applications
-
-The following have been run through RunEXE with **no additional setup** beyond what the tool provisions automatically:
-
-- Notepad++ (Native)
-- Notepad++ (32-bit)
-- PuTTY.exe (Native)
-- KeePass (.NET)
-
-More compatibility data is one of the long-term goals of the project (see [Roadmap](#-roadmap)).
-
-## 🚀 Features
-
-- **Defensive PE analysis** - bounded, read-only parsing of file-backed PE data (Wine is not required)
-- **AppX/MSIX support** - extracts trusted package archives, reads `AppxManifest.xml`, and finds the declared application executable
-- **Architecture detection** - x86 / x86_64 / ARM64, mapped to the correct `WINEARCH`
-- **Import table analysis** - full DLL + function listing (`--imports`)
-- **Subsystem parsing** - Windows GUI vs. Console vs. others
-- **Embedded manifest extraction** - reads `RT_MANIFEST`, surfaces the requested execution level (e.g. `requireAdministrator`)
-- **Version info parsing** - `VS_VERSIONINFO` (product name, publisher, version)
-- **.NET / CLR detection** - via the COM descriptor data directory
-- **Application classification** - conservatively distinguishes games from ordinary applications using Steam, engine, graphics, and input signals
-- **Anti-cheat detection** - warns about Easy Anti-Cheat and BattlEye without treating per-title Proton support as a guaranteed failure
-- **Compatibility reporting** - one consolidated report: recommended backend, required Winetricks verbs, blocking issues, and notes
-- **Host detection** - checks host architecture, Wine and Winetricks availability/version
-- **Proton discovery** - finds Valve, Experimental, GE, custom, Flatpak, Snap, and additional Steam-library installations
-- **Real Proton execution** - creates isolated compat data and invokes Proton with its required Steam compatibility environment
-- **Runtime control** - `--backend`, `--proton`, and `runexe backends` make selection predictable and inspectable
-- **Wine prefix management** - creates and reuses a stable, per-app prefix automatically
-- **Winetricks integration** - installs required runtimes (VC++ redistributables, D3D compiler/extension libs, OpenAL, .NET Framework) before launch
-- **Native Wine execution** - launches from the application directory and preserves arguments, stdout, stderr, timeouts, and exit codes
-- **Polished terminal UI** - readable launch plans, compact tables, clear status language, and a terminal mark derived from the project logo
-- **Scalable desktop GUI** - responsive Qt Quick/QML layouts, drag and drop, runtime configuration, live logs, persistent preferences, and background tasks
-- **Application library** - reopens recent software and restores its last launch choices without sharing custom prefixes between apps
-- **Environment manager** - inventories RunEXE-owned Wine/Proton environments, reports disk use, opens their folders, and removes only validated managed paths
-- **Support report export** - saves the current analysis, compatibility decision, host state, launch preset, environment inventory, and activity log as JSON
-- **Graphics readiness** - identifies DirectX translation paths, probes Vulkan GPUs, and detects DXVK in Wine prefixes and Proton runtimes
-- **Managed Proton setup** - installs the latest official GE-Proton release into RunEXE's per-user data directory without requiring root
-- **Distro-aware Vulkan tooling** - explicitly installs Vulkan diagnostic tools through the detected system package manager when requested
-- **Proton tuning presets** - applies temporary diagnostic, WineD3D, DXVK HUD, fsync, or ntsync overrides per application
-- **Prefix backup and restore** - creates compressed snapshots before removal and restores only into an absent managed location
-- **Expanded Wine configuration** - opens Wine settings, Registry Editor, Control Panel, installed-app management, or Explorer for an exact environment
-- **User-level installation** - one command installs an isolated copy without changing the system Python, and a guarded uninstaller preserves application data
-- **Desktop integration** - adds RunEXE and its logo to freedesktop application menus and the Open With list
-- **Automation-friendly reports** - emits the full analysis and compatibility result as JSON
-- **Explainable compatibility score** - summarizes local blockers, warnings, dependency setup, and host readiness without pretending to predict success probability
-- **Desktop completion notifications** - uses the Linux desktop notification service for background setup, backup, and application completion while RunEXE is not focused
-
-## 📋 Requirements
-
-- Linux on an x86 or x86_64 host (the packaged Qt GUI requires x86_64; the CLI
-  remains available on x86)
-- Python 3.10+
-- [Wine](https://www.winehq.org/), [Proton](https://github.com/ValveSoftware/Proton), or both (`analyze --no-host` needs neither)
-- A preinstalled Proton build is optional; RunEXE can install a managed GE-Proton
-  runtime from Runtimes or with `runexe proton install`.
-- [Winetricks](https://github.com/Winetricks/winetricks) (optional, but needed for automatic dependency installation)
-- [PySide6 Essentials](https://doc.qt.io/qtforpython-6/) (installed automatically with the `gui` extra)
-
-## 🔧 Installation
-
-### Linux release binaries
-
-The **Linux release binaries** GitHub Actions workflow builds every newly created
-tag and every pushed tag update. It publishes the following x86-64 downloads to
-the tag's GitHub release after tests and clean-distribution smoke checks pass:
-
-| Download | Intended systems | Includes |
-| --- | --- | --- |
-| `linux-x86_64-glibc.tar.gz` | glibc 2.35+ (Debian 12+, Ubuntu 22.04+, compatible distributions) | CLI, desktop GUI, Python, Qt |
-| `linux-x86_64-glibc.deb` | Debian / Ubuntu | Same bundle, menu entry, system dependency declarations |
-| `linux-x86_64-glibc.rpm` | Fedora / compatible RPM distributions with glibc 2.35+ | Same bundle and desktop integration |
-| `runexe-bin-*.pkg.tar.zst` | Arch Linux / Manjaro | Same glibc bundle packaged for pacman with desktop integration |
-| `linux-x86_64-musl.tar.gz` | Alpine 3.22+ | CLI and Python; no Qt GUI |
-
-Filenames also include the tag and a short tag hash. Native package versions come
-from the project's numeric `major.minor.patch` version; update `pyproject.toml`
-and `runexe/__init__.py` before tagging a new version. Wine, Proton, graphics
-drivers, and the system display libraries are not bundled. Native packages
-declare their display dependencies; portable desktop archives need those
-libraries already installed. These downloads target x86-64, not ARM or 32-bit x86.
-
-Extract a portable archive and run `./runexe/runexe --help` or
-`./runexe/runexe-gui`. Keep the entire directory together. Install native packages
-with `sudo apt install ./runexe-*.deb`, `sudo dnf install ./runexe-*.rpm`, or
-`sudo pacman -U ./runexe-bin-*.pkg.tar.zst`.
-Verify downloads with `sha256sum -c SHA256SUMS` in a directory containing all
-release assets. Uninstalling a native package preserves per-user app state and
-Wine/Proton environments.
-
-The workflow must be present in the tagged commit. Push tags individually:
-GitHub suppresses tag events when more than three tags are pushed together.
-Tags created by another workflow's default `GITHUB_TOKEN` also do not trigger
-this workflow automatically. Use **Actions → Linux release binaries → Run
-workflow** with an existing tag to build it manually. Build artifacts remain
-available for 14 days even when the release is already published; reruns never
-replace a published release's assets. Draft releases can be retried safely.
-Pull requests that change release packaging also build and smoke-test all formats,
-uploading workflow artifacts without creating or changing a GitHub release.
-
-Build logic lives in `scripts/build_linux.sh` and `scripts/package_linux.py`.
-The desktop baseline is Ubuntu 22.04 (glibc 2.35); musl builds use Alpine 3.22.
-The glibc bundle includes the Qt QML, Qt Quick, Qt Quick Controls, and Qt Quick Dialogs
-runtime modules used by the desktop shell. The musl artifact remains CLI-only. Builds use
-PyInstaller 6.22.2, run the test suite, launch the frozen CLI/GUI away
-from the source checkout, and test package installation in Debian 12, Ubuntu
-22.04, Fedora 43, and Alpine 3.22 before release publication.
-
-### One-command user installation
-
-Install the GUI directly from GitHub without cloning the repository or
-installing pipx:
+Install RunEXE for the current user without cloning the repository or changing the system Python:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/main/install.sh | sh
 ```
 
-The installer creates an isolated virtual environment under
-`$XDG_DATA_HOME/runexe/app`, exposes `runexe` and `runexe-gui` through
-`~/.local/bin`, and adds RunEXE to the current user's desktop application menu.
-It never runs `sudo` or installs system packages. Run `runexe doctor` afterward
-for distribution-specific Wine, Proton, or GUI-library instructions.
-
-For a console-only or menu-free installation:
+Check the Linux host before the first launch:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/main/install.sh | sh -s -- --cli-only
-curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/main/install.sh | sh -s -- --no-desktop
-```
-
-If you prefer to inspect downloaded scripts before running them, download
-[`install.sh`](install.sh), review it, and execute `sh install.sh` locally.
-
-### pipx installation
-
-If pipx is already installed, it provides the cleanest package-managed setup:
-
-```bash
-pipx install "runexe[gui] @ git+https://github.com/CDJuaum/RunEXE.git"
-runexe desktop install
-```
-
-Upgrade or uninstall that installation with:
-
-```bash
-pipx upgrade runexe
-runexe desktop remove
-pipx uninstall runexe
-```
-
-For an installation created by `install.sh`, rerun the same installer to
-upgrade it. Remove its application files and desktop entry with:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/CDJuaum/RunEXE/main/uninstall.sh | sh
-```
-
-The uninstaller deliberately preserves recent-application history and all
-Wine/Proton environments under `$XDG_DATA_HOME/runexe`. Manage those separately
-from the Applications, Environments, and Backups pages or with `runexe environments`.
-
-### Development installation
-
-```bash
-git clone https://github.com/cdjuaum/runexe.git
-cd runexe
-python3 -m venv .venv
-. .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e '.[gui]'
 runexe doctor
 ```
 
-For a CLI-only installation, replace `.[gui]` with `.`. The console interface
-does not import Qt and continues to work on headless hosts, SSH sessions, and
-musl distributions where an official PySide6 wheel is unavailable.
-
-### Distribution portability
-
-RunEXE detects `apt`, `dnf`, `pacman`, `zypper`, `apk`, `xbps-install`,
-`emerge`, `eopkg`, and NixOS. Normal analysis and launch flows do not install
-system packages. An explicit setup action such as `runexe graphics
---install-tools` invokes the detected distribution package manager and may
-request administrator authentication through `pkexec` or `sudo`. Managed
-Proton installation is separate and stays entirely in the current user's data
-directory. These are typical prerequisites:
-
-| Distribution family | Runtime packages |
-| --- | --- |
-| Debian, Ubuntu, Kali, Mint | `sudo apt install wine winetricks` |
-| Fedora, RHEL derivatives | `sudo dnf install wine winetricks` |
-| Arch, Manjaro | `sudo pacman -S wine winetricks` |
-| openSUSE | `sudo zypper install wine winetricks` |
-| Alpine | `sudo apk add wine winetricks` |
-| Void | `sudo xbps-install -S wine winetricks` |
-| Gentoo | `sudo emerge --ask app-emulation/wine-vanilla app-emulation/winetricks` |
-| NixOS | `nix profile install nixpkgs#wineWowPackages.stable nixpkgs#winetricks` |
-
-On Python 3.10-3.13 the PyPI GUI extra uses Qt 6.8.3 because its x86_64 wheel
-supports glibc 2.28 and newer, covering more stable distributions than recent
-Qt wheels. Python 3.14 selects a current PySide6 build, whose official wheel
-requires newer glibc. PyPI does not publish a musllinux PySide6-Essentials
-wheel. On Alpine or another musl system, install the distribution's PySide6
-package and then install RunEXE without the `gui` extra; `runexe doctor`
-verifies the resulting Qt installation. The CLI itself is pure Python and
-works with either glibc or musl.
-
-Wayland and X11 are selected before Qt loads. Automatic mode prefers the
-current desktop session and keeps the other backend as a fallback. Override it
-only when troubleshooting:
+Open the desktop app:
 
 ```bash
-runexe-gui --platform wayland
-runexe gui --platform xcb
-RUNEXE_SOFTWARE_RENDERING=1 runexe-gui
+runexe-gui
 ```
 
-Portable, Nix, and custom runtime layouts can be supplied without modifying
-`PATH`:
-
-```bash
-RUNEXE_WINE_PATH=/path/to/wine runexe run app.exe
-RUNEXE_WINETRICKS_PATH=/path/to/winetricks runexe run app.exe
-RUNEXE_PROTON_PATH=/path/to/Proton runexe run game.exe
-```
-
-No compatibility frontend can guarantee that every Windows application works
-on every distribution: Wine/Proton versions, GPU drivers, kernel features, and
-the application itself still matter. RunEXE's portability guarantee is that
-host differences are detected and explained instead of being encoded as
-Debian-only assumptions or surfacing as unexplained Qt crashes.
-
-## 📖 Usage
-
-**Analyze an executable** - inspect it without running anything:
+Or inspect and run a Windows application from the CLI:
 
 ```bash
 runexe analyze path/to/app.exe
+runexe run path/to/app.exe
 ```
 
-AppX/MSIX packages and unpacked package directories are also supported. RunEXE
-reads the package manifest, safely materializes the declared executable, and
-launches that executable directly through the selected compatibility runtime:
+Open a file directly in the desktop app:
+
+```bash
+runexe-gui path/to/app.exe
+```
+
+`runexe analyze` is read-only and can inspect a PE file without initializing Wine. See [CLI reference](docs/cli.md) for JSON output, AppX/MSIX, explicit backend selection, Proton builds, graphics diagnostics, environments, backups, and automation-oriented commands.
+
+## Install
+
+### Official Linux release packages
+
+Every release is built and smoke-tested in clean Linux environments before publication.
+
+| Download | Intended systems | Includes |
+| --- | --- | --- |
+| `*.deb` | Debian, Ubuntu, Kali, Mint and compatible systems | CLI, desktop GUI, Python, Qt, desktop integration |
+| `*.rpm` | Fedora and compatible RPM systems | CLI, desktop GUI, Python, Qt, desktop integration |
+| `runexe-bin-*.pkg.tar.zst` | Arch Linux, Manjaro and compatible systems | CLI, desktop GUI, Python, Qt, desktop integration |
+| `*-linux-x86_64-glibc.tar.gz` | Portable glibc 2.35+ Linux | CLI, desktop GUI, Python, Qt |
+| `*-linux-x86_64-musl.tar.gz` | Alpine 3.22+ | CLI and Python |
+
+Download the current files from the [latest GitHub release](https://github.com/CDJuaum/RunEXE/releases/latest) and verify them with the published `SHA256SUMS` file.
+
+Native package examples:
+
+```bash
+sudo apt install ./runexe-*.deb
+sudo dnf install ./runexe-*.rpm
+sudo pacman -U ./runexe-bin-*.pkg.tar.zst
+```
+
+Wine, Proton, graphics drivers, and your Linux display stack remain system-managed. Official desktop binaries target x86-64 Linux.
+
+### Requirements
+
+- Linux on x86-64 for the official desktop binaries
+- Wine, Proton, or both to launch Windows software
+- Winetricks for automatic Wine-side dependency provisioning
+- Vulkan-capable drivers for DXVK/VKD3D paths used by many modern games and graphics applications
+
+Python 3.10+ is required for source/Python installations. The official glibc desktop bundles include Python and Qt.
+
+For pipx installs, CLI-only setups, upgrades, uninstalling, distro runtime packages, Wayland/X11 troubleshooting, and custom Wine/Proton paths, see [Installation and platform support](docs/installation.md).
+
+## Usage
+
+### Analyze without launching
+
+```bash
+runexe analyze path/to/app.exe
+runexe analyze path/to/app.exe --imports
+runexe analyze path/to/app.exe --json
+runexe analyze path/to/app.exe --no-host
+```
+
+AppX/MSIX packages and unpacked package directories are supported too:
 
 ```bash
 runexe analyze Paint.msix
 runexe run Paint.msix --no-deps
 ```
 
-Add `--imports` / `-i` to list every imported function per DLL, not just counts:
+### Choose a runtime explicitly
+
+Automatic backend selection is the default. Override it when you know which runtime works best:
 
 ```bash
-runexe analyze path/to/app.exe --imports
+runexe run app.exe --backend wine
+runexe run game.exe --backend proton
+runexe run game.exe --proton "Proton Experimental"
 ```
 
-Emit JSON for scripts, CI, or other tooling, or skip host checks for a purely static report:
-
-```bash
-runexe analyze path/to/app.exe --json
-runexe analyze path/to/app.exe --no-host
-```
-
-**Run software** - analyze it, select Wine or Proton, prepare an isolated environment, and launch:
-
-```bash
-runexe run path/to/app.exe
-```
-
-Useful flags:
-
-```bash
-runexe run path/to/app.exe --verbose        # show prefix/backend/launch details
-runexe run path/to/app.exe --timeout 60     # give up after 60s
-runexe run path/to/app.exe --winver 10      # report Windows 10 to the app
-runexe run path/to/app.exe --no-deps         # do not invoke Winetricks
-runexe run path/to/app.exe --backend wine
-runexe run path/to/game.exe --backend proton
-runexe run path/to/game.exe --proton "Proton Experimental"
-runexe run path/to/game.exe --proton ~/.steam/root/compatibilitytools.d/GE-Proton/proton
-runexe run path/to/game.exe --backend proton --tuning diagnostics
-runexe run path/to/game.exe --backend proton --tuning wined3d
-```
-
-Inspect what is installed and the order in which Proton builds will be selected:
+Inspect available runtimes or install a managed GE-Proton build:
 
 ```bash
 runexe backends
 runexe proton install
 ```
 
-`runexe proton install` downloads the latest official GE-Proton release into
-`$XDG_DATA_HOME/runexe/runtimes/proton` (normally
-`~/.local/share/runexe/runtimes/proton`). It is a user-level installation and
-does not use the distro package manager or require `sudo`; RunEXE discovers the
-managed build automatically alongside Steam and custom Proton installations.
-
-Run the complete, non-destructive host readiness check (or emit JSON for bug
-reports and automated setup):
+### Check graphics and host readiness
 
 ```bash
 runexe doctor
-runexe doctor --no-gui
-runexe doctor --json
 runexe graphics
-runexe graphics --json
-runexe graphics --install-tools
 ```
 
-`runexe graphics --install-tools` is an explicit system change: RunEXE asks the
-detected distro package manager to install its Vulkan diagnostic package (for
-example `vulkan-tools`) and uses the normal privilege prompt when one is
-required. After installation, the command immediately reruns the Vulkan/DXVK
-readiness report.
+The [CLI reference](docs/cli.md) covers argument forwarding, Windows-version overrides, runtime tuning, recent applications, environment configuration, backups, JSON output, storage locations, and guarded cleanup.
 
-List the local application library and RunEXE-owned environments:
+## What RunEXE checks
 
-```bash
-runexe recent
-runexe recent --json
-runexe recent --prune-missing
-runexe rerun APPLICATION_ID
-runexe forget-recent APPLICATION_ID
+| Area | Examples |
+| --- | --- |
+| Executable | Architecture, imports, subsystem, embedded manifest, version info, .NET/CLR, DirectX and input signals |
+| Application type | Conservative game/application classification, engine and Steam signals, anti-cheat warnings |
+| Host | Distribution, libc, package manager, Wine, Winetricks, Proton, display session, Qt runtime |
+| Graphics | Vulkan loader/ICDs, GPU vendors, DXVK state, likely DirectX translation path |
+| Dependencies | Visual C++, .NET Framework, D3D helpers, OpenAL, XInput and other known runtime needs |
+| Managed state | Recent apps, launch presets, Wine/Proton environments, disk usage, backups |
 
-runexe environments
-runexe environments --json
-runexe configure-environment wine:example-0123456789 --tool winecfg
-runexe configure-environment wine:example-0123456789 --tool regedit
-```
+The compatibility score is an explainable summary of local blockers, warnings, dependency setup, and host readiness. It is not a probability that an application will work.
 
-Environment deletion is intentionally explicit because a prefix can contain
-Windows-side settings or save files. RunEXE accepts only the exact identifier
-from `runexe environments`, validates that it is a direct child of a managed
-RunEXE directory, requires `--yes`, and creates a restorable backup by default:
+## Tested applications
 
-```bash
-runexe remove-environment wine:example-0123456789 --yes
-runexe backups
-runexe restore-backup BACKUP_ID --yes
-runexe remove-backup BACKUP_ID --yes
-```
+These applications have been run through RunEXE without manual setup beyond what the tool provisions automatically:
 
-Use `--no-backup` only when you deliberately do not want the safety snapshot.
-Backups live under `$XDG_DATA_HOME/runexe/backups`. Restore validates archive
-paths and refuses to replace any existing environment.
+| Application | Notes |
+| --- | --- |
+| Notepad++ | Native 64-bit build |
+| Notepad++ | 32-bit build |
+| PuTTY | Native Windows executable |
+| KeePass | .NET application |
 
-Recent application state is stored under
-`$XDG_STATE_HOME/runexe/applications.json` (normally
-`~/.local/state/runexe/applications.json`). It is bounded, private to the local
-machine, and never uploaded. The GUI's Activity page exports a support report
-only when you deliberately choose a destination.
+Application compatibility still depends on Wine/Proton versions, graphics drivers, kernel features, Windows API usage, DRM/anti-cheat, and the application itself. Broader community compatibility data remains on the roadmap.
 
-`--backend auto` is the default. It prefers Proton for detected games and Wine
-for regular applications, then falls back to whichever runtime is available.
-`--proton` implies the Proton backend. `RUNEXE_PROTON_PATH` can point to a custom
-Proton directory or launcher that is outside Steam's normal locations.
+## Data and safety
 
-Pass arguments to the Windows application after `--`:
+- `runexe analyze` is read-only and does not initialize Wine prefixes.
+- RunEXE never modifies the original EXE/AppX/MSIX source file.
+- AppX/MSIX package signatures are not verified; only run packages you trust.
+- Wine and Proton are compatibility layers, **not security sandboxes**. Use a VM or dedicated sandbox for untrusted software.
+- Managed prefixes may contain application settings or save files. RunEXE creates a backup by default before managed-environment removal unless you explicitly disable it.
+- Recent-application state and managed environments stay on the local machine. The RunEXE website does not receive this state.
+- Game classification, dependency detection, and anti-cheat detection are best-effort signals, not guarantees.
 
-```bash
-runexe run path/to/app.exe -- --portable "C:\\data file.txt"
-```
+## Documentation
 
-Wine prefixes live under `$XDG_DATA_HOME/runexe/prefixes`; Proton compat data
-lives under `$XDG_DATA_HOME/runexe/proton`. `--prefix` overrides the relevant
-location for either backend. Wine dependency provisioning is automatic. Proton
-dependency changes are opt-in with `--deps` because modifying a
-game-focused Proton prefix can reduce compatibility.
+- [Installation and platform support](docs/installation.md) — release packages, pipx, upgrades, uninstalling, distro prerequisites, Qt, Wayland/X11, custom runtime paths
+- [CLI reference](docs/cli.md) — analysis, launch flags, backends, Proton, graphics, recent apps, environments, backups, state paths
+- [Desktop UI design](docs/desktop-ui.md) — Qt Quick/QML structure and desktop interaction conventions
+- [Release process](docs/releasing.md) — tag builds, package formats, smoke-test matrix, release workflow behavior
+- [Changelog](CHANGELOG.md) — release history and compatibility changes
+- [Project website](https://runexe.rrmtools.uk/) — downloads, overview, and an introductory guide to running EXE files on Linux
 
-**Check the installed version:**
+## Roadmap
+
+The completed pre-1.0 work is preserved in the [changelog](CHANGELOG.md). Current longer-term goals include:
+
+- Launch existing Steam titles by App ID
+- Extend compatibility scoring with broader application-specific evidence
+- Flatpak and AppImage packages
+- A community application compatibility database
+
+Feature requests and compatibility reports are welcome in [GitHub Issues](https://github.com/CDJuaum/RunEXE/issues).
+
+## Development
 
 ```bash
-runexe version
-```
-
-## 🗺️ Roadmap
-
-### v0.3.x
-
-- [x] PE executable analysis
-- [x] Architecture detection
-- [x] Import analysis
-- [x] .NET detection
-- [x] Compatibility reporting
-- [x] Host detection
-- [x] Wine detection
-- [x] Wine prefix management
-- [x] Winetricks integration
-- [x] Native Wine execution
-- [x] Improve 32-bit Wine capability detection
-- [x] Proton backend
-- [x] Steam and custom Proton discovery
-- [x] Automatic Proton environment configuration
-- [x] AppX/MSIX inspection and launch support
-- [x] Rich terminal UI and coordinated project identity
-
-### v0.4.x
-
-- [x] Native Qt desktop interface
-- [x] Responsive overview, launch setup, runtimes, applications, environments, backups,
-  and activity pages
-- [x] Background analysis and environment preparation
-- [x] Automatic Wine and Proton configuration actions
-- [x] Live non-blocking application output
-- [x] Persistent desktop preferences and keyboard navigation
-- [x] Desktop notifications for background task and application completion
-- [x] Recent-application history and per-app launch presets
-- [x] More Windows runtime detection
-- [x] Better DirectX dependency detection
-- [x] GPU/Vulkan capability detection
-- [x] DXVK detection
-- [x] More robust application classification
-- [x] Improved Wine configuration
-
-### v0.5.x
-
-- [x] Recent-application library shared by GUI and CLI
-- [x] One-command relaunch from saved CLI presets
-- [x] Persistent per-app runtime, Windows version, dependency, prefix, and argument presets
-- [x] Managed Wine/Proton environment inventory with disk usage
-- [x] Guarded cleanup restricted to RunEXE-owned environment paths
-- [x] Exportable GUI support reports
-- [x] One-command isolated user installer and guarded uninstaller
-- [x] Freedesktop application-menu entry, logo, and Open With registration
-- [x] Optional Proton runtime tuning presets for advanced troubleshooting
-- [x] Prefix backup and restore before destructive maintenance
-- [x] Vulkan/GPU readiness reporting for DirectX translation
-
-### Future
-
-- [ ] Launch existing Steam titles by App ID
-- [x] Explainable local compatibility scoring from blockers, warnings, dependencies, and host readiness
-- [ ] Extend compatibility scoring with broader application-specific evidence
-- [x] Native `.deb` and RPM packages
-- [ ] Flatpak and AppImage packages
-- [ ] Application database / community compatibility data
-
-## 🛡️ Notes
-
-- RunEXE does not modify the analyzed executable in any way - analysis is read-only.
-- `runexe analyze` does not initialize Wine prefixes or otherwise mutate Wine state.
-- AppX/MSIX archives are extracted into `$XDG_CACHE_HOME/runexe/packages` (or `~/.cache/runexe/packages`) for reuse. Package signatures are not verified; only run packages you trust.
-- Package identity and Microsoft Store services are not recreated. Classic Win32 applications distributed inside AppX/MSIX may work, while UWP/Store-only features may still fail under Wine.
-- Wine is a compatibility layer, **not a security sandbox**. Only run executables you trust; use a VM or a dedicated sandbox for untrusted software.
-- Wine/Proton prefixes may contain application settings and save data. Inspect
-  or back up important files before environment removal; RunEXE never removes
-  the original EXE/AppX/MSIX source.
-- Anti-cheat detection is a best-effort signal based on known import names (see `constants.py`); it is not exhaustive and deliberately does not attempt to detect wrapper/VM-based DRM such as Denuvo. [Proton support for EAC and BattlEye is enabled per title](https://partner.steamgames.com/doc/steamhardware/proton), so these detections are warnings rather than automatic blockers.
-- Game detection is heuristic. Use `--backend wine` or `--backend proton` whenever you know which runtime the application needs.
-- RunEXE launches Proton directly through its `proton run` interface with isolated compat data. Valve primarily designs Proton for use through Steam, so a particular title may still depend on Steam runtime services or launch configuration.
-- Provided "AS IS" without warranty of any kind.
-
-## 🤝 Contributing
-
-Contributions are welcome! Feel free to open an issue or submit a Pull Request.
-
-Install the development tools and run the full local verification suite:
-
-```bash
+git clone https://github.com/CDJuaum/RunEXE.git
+cd RunEXE
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install --upgrade pip
 python -m pip install -e '.[dev,gui]'
+```
+
+Run the standard checks:
+
+```bash
 ruff check .
 ruff format --check .
 pytest
 python -m build
 ```
 
-## 📄 License
+The GUI is a client of the same backend services as the CLI; new compatibility behavior should live in reusable backend code rather than desktop-only logic.
 
-This project is licensed under the **LGPL-2.1** License - see the [LICENSE](LICENSE) file for details.
+## Contributing
 
-## 💬 Support
+Contributions are welcome. Please open an issue when a change affects user-visible compatibility behavior, packaging, or a significant interface decision so the expected behavior can be discussed and reproduced.
 
-For support or questions, please open an issue on GitHub.
+## License
+
+RunEXE is licensed under the [LGPL-2.1](LICENSE).
+
+## Support
+
+For bugs, compatibility reports, or feature requests, use the [GitHub issue tracker](https://github.com/CDJuaum/RunEXE/issues).

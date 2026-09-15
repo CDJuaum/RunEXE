@@ -2,6 +2,30 @@
 
 All notable RunEXE changes are documented here.
 
+## [1.0.0] - 2026-09-15
+
+### Added
+
+- The project website now has a full 1.0 product experience with clearer Wine/Proton positioning,
+  distro-focused installation paths, a compatibility workflow, FAQ, and a dedicated guide for
+  running Windows EXE files on Linux.
+- Search and sharing metadata now include canonical URLs, Open Graph/Twitter cards, index controls,
+  a clean sitemap, and `SoftwareApplication`/`WebSite` structured data for the RunEXE application.
+- The website guide provides practical Wine-vs-Proton, dependency, graphics, troubleshooting, and
+  security guidance while keeping the download path connected to the official project.
+- Focused installation, CLI, and release-process documentation now live under `docs/`.
+
+### Changed
+
+- The README has been reorganized around the desktop app, core capabilities, quick start,
+  installation choices, common usage, safety, documentation, and the current roadmap. Detailed
+  platform, CLI, and release-engineering material moved into dedicated guides.
+- Project metadata now identifies RunEXE 1.0 as a stable release and points the package homepage to
+  `runexe.rrmtools.uk` while retaining direct source, issue, documentation, and changelog links.
+- The public site remains free of optional analytics, advertising, profiling, and non-essential
+  cookies; the privacy page remains available while search indexing is focused on product and guide
+  content.
+
 ## [0.9.4] - 2026-09-15
 
 ### Added
