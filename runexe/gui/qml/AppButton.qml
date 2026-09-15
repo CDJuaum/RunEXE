@@ -11,10 +11,12 @@ Button {
     rightPadding: 14
     font.weight: primary ? Font.DemiBold : Font.Normal
 
+    HoverHandler { cursorShape: Qt.ArrowCursor }
+
     contentItem: Text {
         text: root.text
         color: root.enabled
-               ? (root.primary ? Theme.palette.highlightedText : (root.danger ? Theme.error : Theme.text))
+               ? (root.primary ? Theme.accentText : (root.danger ? Theme.error : Theme.text))
                : Theme.textMuted
         font: root.font
         verticalAlignment: Text.AlignVCenter

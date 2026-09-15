@@ -121,6 +121,81 @@ def test_launches_with_selected_proton(select, ensure, run, tmp_path):
     )
 
 
+@patch("runexe.runner.ensure_umu_launcher", return_value="/usr/bin/umu-run")
+def test_ge_proton_launch_spec_uses_umu(ensure_umu, tmp_path):
+    proton_dir = tmp_path / "GE-Proton11-6"
+    proton_dir.mkdir()
+    script = proton_dir / "proton"
+    script.touch()
+    installation = ProtonInstallation("GE-Proton11-6", script, "11-6", tmp_path / "Steam")
+    executable = tmp_path / "game" / "bg3.exe"
+    executable.parent.mkdir()
+    executable.touch()
+    compat = tmp_path / "compat"
+    prepared = PreparedEnvironment(
+        backend="proton",
+        path=compat,
+        runtime_name=installation.name,
+        launcher=str(script),
+        wine_arch="win64",
+        proton_installation=installation,
+    )
+
+    spec = build_launch_spec(ExecutableInfo(executable, True), prepared, ["--skip-launcher"])
+
+    assert spec.command == ("/usr/bin/umu-run", str(executable.resolve()), "--skip-launcher")
+    assert spec.env["WINEPREFIX"] == str(compat / "pfx")
+    assert spec.env["PROTONPATH"] == str(proton_dir)
+    assert spec.env["PROTON_VERB"] == "run"
+    assert spec.env["GAMEID"] == "umu-default"
+
+
+@patch("runexe.runner.run_with_progress")
+@patch("runexe.runner.ensure_umu_launcher", return_value="/usr/bin/umu-run")
+def test_ge_proton_prefix_initialization_uses_umu(ensure_umu, run_progress, tmp_path):
+    from runexe.runner import ensure_proton_prefix
+
+    proton_dir = tmp_path / "GE-Proton11-6"
+    proton_dir.mkdir()
+    script = proton_dir / "proton"
+    script.touch()
+    installation = ProtonInstallation("GE-Proton11-6", script, "11-6", tmp_path / "Steam")
+    executable = tmp_path / "bg3.exe"
+    executable.touch()
+    compat = tmp_path / "compat"
+
+    def initialize(*_args, **kwargs):
+        (compat / "pfx" / "drive_c").mkdir(parents=True)
+        return subprocess.CompletedProcess([], 0)
+
+    run_progress.side_effect = initialize
+
+    ensure_proton_prefix(installation, compat, executable)
+
+    assert run_progress.call_args.args[0] == ["/usr/bin/umu-run", "cmd.exe", "/c", "exit"]
+    assert run_progress.call_args.kwargs["env"]["WINEPREFIX"] == str(compat / "pfx")
+    assert run_progress.call_args.kwargs["env"]["PROTONPATH"] == str(proton_dir)
+
+
+@patch("runexe.runner.ensure_umu_launcher", return_value="/managed/umu-run")
+def test_existing_ge_proton_prefix_still_prepares_umu(ensure_umu, tmp_path):
+    from runexe.runner import ensure_proton_prefix
+
+    proton_dir = tmp_path / "GE-Proton11-6"
+    proton_dir.mkdir()
+    script = proton_dir / "proton"
+    script.touch()
+    installation = ProtonInstallation("GE-Proton11-6", script, "11-6", tmp_path / "Steam")
+    executable = tmp_path / "bg3.exe"
+    executable.touch()
+    compat = tmp_path / "compat"
+    (compat / "pfx" / "drive_c").mkdir(parents=True)
+
+    ensure_proton_prefix(installation, compat, executable)
+
+    ensure_umu.assert_called_once_with()
+
+
 @patch("runexe.runner.subprocess.run")
 @patch("runexe.runner.ensure_proton_prefix")
 @patch("runexe.runner.select_proton")

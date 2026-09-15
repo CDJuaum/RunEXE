@@ -132,9 +132,22 @@ Item {
         severity: "error"
         title: "Remove isolated environment?"
         footer: DialogButtonBox {
-            Button { text: "Back up and remove"; DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole; onClicked: { removeDialog.close(); controller.removeSelectedEnvironment(true) } }
-            Button { text: "Remove without backup"; DialogButtonBox.buttonRole: DialogButtonBox.DestructiveRole; onClicked: { removeDialog.close(); controller.removeSelectedEnvironment(false) } }
-            Button { text: "Cancel"; DialogButtonBox.buttonRole: DialogButtonBox.RejectRole; onClicked: removeDialog.close() }
+            AppButton {
+                text: "Back up and remove"
+                DialogButtonBox.buttonRole: DialogButtonBox.AcceptRole
+                onClicked: { removeDialog.close(); controller.removeSelectedEnvironment(true) }
+            }
+            AppButton {
+                text: "Remove without backup"
+                danger: true
+                DialogButtonBox.buttonRole: DialogButtonBox.DestructiveRole
+                onClicked: { removeDialog.close(); controller.removeSelectedEnvironment(false) }
+            }
+            AppButton {
+                text: "Cancel"
+                DialogButtonBox.buttonRole: DialogButtonBox.RejectRole
+                onClicked: removeDialog.close()
+            }
         }
         Text {
             width: 420

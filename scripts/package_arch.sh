@@ -41,7 +41,7 @@ pkgdesc='Analyze and run Windows software on Linux with Wine or Proton'
 arch=('x86_64')
 url='https://github.com/CDJuaum/RunEXE'
 license=('LGPL-2.1-only')
-depends=('glibc>=2.35' 'libglvnd' 'libxkbcommon' 'libxkbcommon-x11' 'dbus' 'fontconfig' 'xcb-util-cursor' 'xcb-util-wm' 'xcb-util-image' 'xcb-util-keysyms' 'xcb-util-renderutil' 'libxcb' 'wayland')
+depends=('glibc>=2.35' 'python' 'libglvnd' 'libxkbcommon' 'libxkbcommon-x11' 'dbus' 'fontconfig' 'xcb-util-cursor' 'xcb-util-wm' 'xcb-util-image' 'xcb-util-keysyms' 'xcb-util-renderutil' 'libxcb' 'wayland')
 optdepends=('wine: run Windows applications with Wine' 'winetricks: install Windows runtime dependencies')
 options=('!strip')
 

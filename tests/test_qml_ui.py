@@ -7,7 +7,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 pytest.importorskip("PySide6")
 
-from PySide6.QtCore import QEventLoop, QPoint, QPointF, QProcess, Qt, QTimer
+from PySide6.QtCore import QCoreApplication, QEventLoop, QPoint, QPointF, QProcess, Qt, QTimer
 from PySide6.QtQuick import QQuickItem
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
@@ -41,6 +41,20 @@ def test_application_uses_explicit_close_policy(qt_app):
         assert qt_app.quitOnLastWindowClosed() is False
     finally:
         qt_app.setQuitOnLastWindowClosed(previous)
+
+
+def test_linux_application_disables_native_dialogs(qt_app, monkeypatch):
+    attribute = Qt.ApplicationAttribute.AA_DontUseNativeDialogs
+    previous = QCoreApplication.testAttribute(attribute)
+    try:
+        QCoreApplication.setAttribute(attribute, False)
+        monkeypatch.setattr(sys, "platform", "linux")
+
+        _configure_application(qt_app)
+
+        assert QCoreApplication.testAttribute(attribute) is True
+    finally:
+        QCoreApplication.setAttribute(attribute, previous)
 
 
 def test_launched_process_exit_keeps_runexe_window_open(qt_app, tmp_path):
@@ -123,15 +137,31 @@ def test_qml_teardown_destroys_engine_before_controller(qt_app, tmp_path):
     assert destroyed == ["engine", "controller"]
 
 
-def test_qml_shell_loads_all_seven_pages(qt_app, tmp_path):
+def test_qml_shell_loads_all_pages(qt_app, tmp_path):
     controller, engine, root = make_shell(qt_app, tmp_path)
 
     assert root.property("minimumWidth") == 920
     assert root.property("minimumHeight") == 680
-    for page in range(7):
+    for page in range(8):
         root.showPage(page)
         qt_app.processEvents()
         assert root.property("currentPage") == page
+
+    root.close()
+    engine.deleteLater()
+    controller.deleteLater()
+
+
+def test_settings_and_runtime_progress_surfaces_are_available(qt_app, tmp_path):
+    controller, engine, root = make_shell(qt_app, tmp_path)
+
+    root.showPage(controller.PAGE_SETTINGS)
+    qt_app.processEvents()
+    assert root.findChild(QQuickItem, "settingsPage") is not None
+
+    root.showPage(controller.PAGE_RUNTIMES)
+    qt_app.processEvents()
+    assert root.findChild(QQuickItem, "runtimeInstallProgress") is not None
 
     root.close()
     engine.deleteLater()

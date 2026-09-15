@@ -12,6 +12,7 @@ import platform
 import shlex
 import shutil
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -89,6 +90,7 @@ def find_executable(name: str) -> str | None:
     configuration = {
         "wine": ("RUNEXE_WINE_PATH", ("wine", "wine64")),
         "winetricks": ("RUNEXE_WINETRICKS_PATH", ("winetricks",)),
+        "umu-run": ("RUNEXE_UMU_PATH", ("umu-run",)),
     }
     variable, candidates = configuration.get(name, (f"RUNEXE_{name.upper()}_PATH", (name,)))
     configured = _configured_executable(variable)
@@ -397,12 +399,20 @@ def install_system_component(
     distribution: LinuxDistribution | None = None,
     *,
     timeout: int = 900,
+    progress: Callable[[str, int | None], None] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Install a known host component with the distribution package manager."""
 
+    if progress is not None:
+        progress(f"Step 1 of 3 · Resolving packages for {component}", 10)
     command = package_install_command(component, distribution)
+    if progress is not None:
+        progress(
+            "Step 2 of 3 · Installing system packages · administrator approval may be required",
+            None,
+        )
     try:
-        return subprocess.run(
+        result = subprocess.run(
             command,
             check=True,
             capture_output=True,
@@ -417,6 +427,9 @@ def install_system_component(
         raise SystemInstallError("System package installation timed out.") from error
     except OSError as error:
         raise SystemInstallError(f"Could not start system package installation: {error}") from error
+    if progress is not None:
+        progress(f"Step 3 of 3 · {component.title()} packages installed", 100)
+    return result
 
 
 def detect_libc() -> tuple[str, str | None]:

@@ -239,11 +239,19 @@ def test_runtime_provisioning_actions_use_background_hooks(qt_app, tmp_path, mon
     tasks = []
     refreshes = []
     vulkan_components = []
+    umu_installs = []
 
-    monkeypatch.setattr("runexe.gui.controller.install_managed_proton", lambda: installation)
+    monkeypatch.setattr(
+        "runexe.gui.controller.install_managed_proton",
+        lambda *, progress=None: installation,
+    )
+    monkeypatch.setattr(
+        "runexe.gui.controller.ensure_umu_launcher",
+        lambda *, progress=None: umu_installs.append(True) or "/managed/umu-run",
+    )
     monkeypatch.setattr(
         "runexe.gui.controller.install_system_component",
-        lambda component: vulkan_components.append(component) or object(),
+        lambda component, *, progress=None: vulkan_components.append(component) or object(),
     )
     monkeypatch.setattr(controller, "refreshRuntimes", lambda: refreshes.append(True))
 
@@ -257,10 +265,33 @@ def test_runtime_provisioning_actions_use_background_hooks(qt_app, tmp_path, mon
     qt_app.processEvents()
 
     assert [key for key, _label in tasks] == ["install-proton", "install-vulkan"]
+    assert umu_installs == [True]
     assert vulkan_components == ["vulkan"]
     assert refreshes == [True, True]
     assert "Managed Proton ready" in controller.activityText
     assert "Vulkan tools installation completed" in controller.activityText
+
+
+def test_controller_exposes_persistent_app_theme_setting(qt_app, tmp_path):
+    controller = RunEXEController(
+        auto_refresh=False,
+        application_library=ApplicationLibrary(tmp_path / "library.json"),
+    )
+    original = controller.themeMode
+    target = "dark" if original != "dark" else "light"
+    try:
+        controller.setThemeMode(target)
+        assert controller.themeMode == target
+        assert {option["value"] for option in controller.themeOptions} == {
+            "system",
+            "light",
+            "dark",
+        }
+
+        controller.setThemeMode("invalid")
+        assert controller.themeMode == target
+    finally:
+        controller.setThemeMode(original)
 
 
 def test_runtime_refresh_reuses_one_proton_snapshot(qt_app, monkeypatch):

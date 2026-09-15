@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QCoreApplication, QEvent, QUrl
+from PySide6.QtCore import QCoreApplication, QEvent, Qt, QUrl
 from PySide6.QtGui import QGuiApplication, QIcon
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuickControls2 import QQuickStyle
@@ -26,6 +26,14 @@ def _asset_path() -> Path:
 
 def _configure_application(app: QGuiApplication) -> None:
     """Apply RunEXE-wide application metadata and lifecycle policy."""
+
+    # Native Linux file dialogs can take an exclusive pointer grab under some
+    # X11/VM setups (notably VMware), causing the cursor to be warped back into
+    # the dialog as the user tries to leave it.  Qt Quick Dialogs has its own
+    # fallback implementation, which avoids that platform-level mouse grab.
+    # Set the attribute before Main.qml creates any FileDialog/FolderDialog.
+    if sys.platform.startswith("linux"):
+        QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_DontUseNativeDialogs, True)
 
     # RunEXE owns its close policy explicitly through Main.qml -> requestClose().
     # Do not let Qt end the event loop just because it believes the last window

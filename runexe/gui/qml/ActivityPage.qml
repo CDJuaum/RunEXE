@@ -22,11 +22,6 @@ Item {
             }
             RowLayout {
                 Layout.fillWidth: true
-                Switch {
-                    text: "Desktop notifications"
-                    checked: controller.notificationsEnabled
-                    onToggled: controller.setNotificationsEnabled(checked)
-                }
                 Item { Layout.fillWidth: true }
                 AppButton {
                     text: "Export report"

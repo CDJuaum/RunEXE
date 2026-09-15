@@ -2,6 +2,45 @@
 
 All notable RunEXE changes are documented here.
 
+## [1.1.0] - 2026-09-15
+
+### Added
+
+- RunEXE can now install the official `umu-launcher` zipapp automatically into its own user data
+  directory when GE-Proton is used outside Steam. A system `umu-run` or explicit
+  `RUNEXE_UMU_PATH` still takes priority, while the managed download is bounded, extracts only the
+  expected executable, and verifies GitHub's published SHA-256 asset digest when available.
+- The desktop app now has a dedicated Settings page with persistent System, Light, and Dark theme
+  choices, desktop notification controls, version information, and a `Ctrl+,` shortcut.
+- Runtime provisioning now reports determinate or indeterminate progress in the Runtimes page for
+  managed GE-Proton, UMU, and Vulkan-tool installation.
+
+### Changed
+
+- GE-Proton launches outside Steam now run through UMU for compatibility-data initialization,
+  normal game launches, Windows-version configuration, and environment maintenance tools such as
+  Winecfg, Registry Editor, Control Panel, Explorer, and the uninstaller. Existing GE-Proton
+  prefixes also ensure UMU is ready before reuse.
+- Installing RunEXE-managed GE-Proton from the desktop now provisions UMU in the same background
+  task, so a newly installed runtime is ready for non-Steam games immediately.
+- Native DEB, RPM, and Arch packages now declare a system Python 3 runtime for the managed UMU
+  zipapp used by GE-Proton outside Steam.
+- AppX/MSIX extraction limits now scale with archive size instead of stopping at the old fixed
+  512 MiB ceiling, while retaining a 32 GiB absolute cap, file-count checks, link/path protections,
+  and a free-disk-space reserve before extraction begins.
+- Desktop theme colors now propagate through the Qt palette, and destructive environment-removal
+  actions use RunEXE's styled controls consistently.
+
+### Fixed
+
+- Linux file and folder pickers now use Qt's built-in dialog implementation, avoiding native-dialog
+  pointer grabs that could repeatedly warp the mouse cursor back into the picker under X11/VMware.
+- GE-Proton no longer fails immediately with a generic compat-data initialization exit code when
+  launched directly outside Steam; RunEXE supplies the UMU/Steam-runtime path that current
+  GE-Proton expects.
+- Button and navigation hover behavior no longer forces an unexpected pointer shape, and forced
+  light/dark themes keep readable accent-button text independent of the desktop palette.
+
 ## [1.0.0] - 2026-09-15
 
 ### Added

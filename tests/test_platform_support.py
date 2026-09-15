@@ -81,7 +81,12 @@ def test_install_system_component_executes_without_shell(monkeypatch):
 
     monkeypatch.setattr("runexe.platform_support.subprocess.run", run)
 
-    install_system_component("vulkan", LinuxDistribution("arch"))
+    progress = []
+    install_system_component(
+        "vulkan",
+        LinuxDistribution("arch"),
+        progress=lambda label, value: progress.append((label, value)),
+    )
 
     assert calls[0][0] == [
         "/usr/bin/sudo",
@@ -93,6 +98,9 @@ def test_install_system_component_executes_without_shell(monkeypatch):
     ]
     assert calls[0][1]["check"] is True
     assert "shell" not in calls[0][1]
+    assert progress[0][1] == 10
+    assert progress[1][1] is None
+    assert progress[-1][1] == 100
 
 
 def test_automatic_install_is_explicitly_unsupported_on_nixos():
@@ -129,6 +137,17 @@ def test_custom_wine_path_supports_nonstandard_and_immutable_distros(monkeypatch
     )
 
     assert find_executable("wine") == str(configured)
+
+
+def test_custom_umu_path_uses_stable_environment_variable(monkeypatch):
+    configured = Path("/opt/umu/bin/umu-run")
+    monkeypatch.setenv("RUNEXE_UMU_PATH", str(configured))
+    monkeypatch.setattr(
+        "runexe.platform_support.shutil.which",
+        lambda name: str(configured) if name == str(configured) else None,
+    )
+
+    assert find_executable("umu-run") == str(configured)
 
 
 def test_qt_platform_prefers_wayland_with_x11_fallback():

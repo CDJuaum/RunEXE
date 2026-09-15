@@ -9,6 +9,7 @@ from pathlib import Path
 from .environments import EnvironmentInfo
 from .platform_support import find_executable, install_hint
 from .proton import ProtonError, proton_environment, select_proton
+from .umu import UmuError, ensure_umu_launcher, requires_umu, umu_environment
 
 CONFIGURATION_TOOLS: dict[str, tuple[str, str]] = {
     "winecfg": ("Wine settings", "winecfg"),
@@ -56,8 +57,20 @@ def open_environment_configuration(
         except ProtonError as error:
             raise ConfigurationError(str(error)) from error
         source = Path(environment.source) if environment.source else environment.path
-        command = [str(installation.script), "runinprefix", program]
-        env = proton_environment(installation, environment.path, source)
+        if requires_umu(installation):
+            try:
+                command = [ensure_umu_launcher(), program]
+            except UmuError as error:
+                raise ConfigurationError(str(error)) from error
+            env = umu_environment(
+                installation,
+                environment.path,
+                source,
+                verb="runinprefix",
+            )
+        else:
+            command = [str(installation.script), "runinprefix", program]
+            env = proton_environment(installation, environment.path, source)
     else:
         helper = find_executable(program)
         wine = find_executable("wine")

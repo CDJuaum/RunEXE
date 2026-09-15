@@ -19,11 +19,32 @@ PACKAGE_CACHE_DIR = (
     Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "runexe" / "packages"
 )
 MAX_PACKAGE_FILES = 20_000
-MAX_PACKAGE_BYTES = 512 * 1024 * 1024
+BASE_PACKAGE_BYTES = 512 * 1024 * 1024
+MAX_PACKAGE_BYTES = 32 * 1024 * 1024 * 1024
+PACKAGE_EXPANSION_FACTOR = 16
+PACKAGE_DISK_RESERVE_BYTES = 256 * 1024 * 1024
 
 
 class PackageError(ValueError):
     """Raised when a package cannot be inspected safely."""
+
+
+def _format_bytes(size: int) -> str:
+    value = float(size)
+    for unit in ("B", "KiB", "MiB", "GiB", "TiB"):
+        if value < 1024 or unit == "TiB":
+            return f"{value:.0f} {unit}" if unit == "B" else f"{value:.1f} {unit}"
+        value /= 1024
+    return f"{size} B"
+
+
+def _package_byte_limit(archive_size: int) -> int:
+    """Return an automatic extraction allowance for an archive of *archive_size* bytes."""
+
+    return min(
+        MAX_PACKAGE_BYTES,
+        max(BASE_PACKAGE_BYTES, archive_size * PACKAGE_EXPANSION_FACTOR),
+    )
 
 
 def _local_name(tag: str) -> str:
@@ -114,20 +135,40 @@ def _package_manifest(root: Path) -> Path:
 
 
 def _extract_archive(archive: Path, destination: Path) -> None:
-    total_size = 0
     try:
         with zipfile.ZipFile(archive) as package:
             members = package.infolist()
             if len(members) > MAX_PACKAGE_FILES:
                 raise PackageError("Package contains too many files")
+
+            archive_size = archive.stat().st_size
+            byte_limit = _package_byte_limit(archive_size)
+            total_size = 0
+            validated_members: list[tuple[zipfile.ZipInfo, Path]] = []
             for member in members:
                 relative = _safe_relative_path(member.filename)
                 mode = member.external_attr >> 16
                 if mode & 0o170000 == 0o120000:
                     raise PackageError("Symbolic links are not allowed in packages")
                 total_size += member.file_size
-                if total_size > MAX_PACKAGE_BYTES:
-                    raise PackageError("Package is larger than the 512 MiB safety limit")
+                if total_size > byte_limit:
+                    raise PackageError(
+                        "Package expands beyond its automatic safety limit "
+                        f"({_format_bytes(total_size)} required, {_format_bytes(byte_limit)} "
+                        "allowed)."
+                    )
+                validated_members.append((member, relative))
+
+            free_bytes = shutil.disk_usage(destination).free
+            required_bytes = total_size + PACKAGE_DISK_RESERVE_BYTES
+            if required_bytes > free_bytes:
+                raise PackageError(
+                    "Not enough free disk space to extract package "
+                    f"({_format_bytes(required_bytes)} needed including safety reserve, "
+                    f"{_format_bytes(free_bytes)} available)."
+                )
+
+            for member, relative in validated_members:
                 target = destination / relative
                 target.parent.mkdir(parents=True, exist_ok=True)
                 if not member.is_dir():

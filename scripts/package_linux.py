@@ -102,7 +102,7 @@ Section: utils
 Priority: optional
 Architecture: amd64
 Maintainer: RunEXE contributors <noreply@github.com>
-Depends: libc6 (>= 2.35), libglib2.0-0, libgl1, libegl1, libxkbcommon0, libxkbcommon-x11-0,
+Depends: libc6 (>= 2.35), python3, libglib2.0-0, libgl1, libegl1, libxkbcommon0, libxkbcommon-x11-0,
  libdbus-1-3, libfontconfig1, libxcb-cursor0, libxcb-icccm4, libxcb-image0,
  libxcb-keysyms1, libxcb-render-util0, libxcb-xinerama0, libxcb-xkb1,
  libwayland-client0
@@ -132,6 +132,7 @@ URL: https://github.com/CDJuaum/RunEXE
 BuildArch: x86_64
 AutoReqProv: no
 Requires: glibc >= 2.35, libGL.so.1()(64bit), libEGL.so.1()(64bit)
+Requires: python3
 Requires: libxkbcommon.so.0()(64bit), libxkbcommon-x11.so.0()(64bit)
 Requires: libdbus-1.so.3()(64bit), libfontconfig.so.1()(64bit)
 Requires: libxcb-cursor.so.0()(64bit), libwayland-client.so.0()(64bit)

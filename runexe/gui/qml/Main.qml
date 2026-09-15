@@ -11,6 +11,14 @@ ApplicationWindow {
     minimumWidth: 920
     minimumHeight: 680
     color: Theme.window
+    palette.window: Theme.window
+    palette.windowText: Theme.text
+    palette.base: Theme.surface
+    palette.text: Theme.text
+    palette.button: Theme.surfaceRaised
+    palette.buttonText: Theme.text
+    palette.highlight: Theme.accent
+    palette.highlightedText: Theme.accentText
     title: pageTitles[currentPage].title + " — RunEXE"
 
     property int currentPage: 0
@@ -22,12 +30,15 @@ ApplicationWindow {
         { title: "Applications", description: "Reopen recent software with its saved launch settings.", icon: "▦", section: "MANAGE", startsSection: true },
         { title: "Environments", description: "Inspect, configure, back up, and remove isolated application environments.", icon: "◇", section: "MANAGE", startsSection: false },
         { title: "Backups", description: "Restore or remove saved environment snapshots.", icon: "↶", section: "MANAGE", startsSection: false },
-        { title: "Activity", description: "Review analysis, preparation, launch output, and errors.", icon: "≡", section: "SUPPORT", startsSection: true }
+        { title: "Activity", description: "Review analysis, preparation, launch output, and errors.", icon: "≡", section: "SUPPORT", startsSection: true },
+        { title: "Settings", description: "Change RunEXE appearance and application behavior.", icon: "⚙", section: "SUPPORT", startsSection: false }
     ]
     readonly property var pageSources: [
         "OverviewPage.qml", "LaunchSetupPage.qml", "RuntimesPage.qml", "ApplicationsPage.qml",
-        "EnvironmentsPage.qml", "BackupsPage.qml", "ActivityPage.qml"
+        "EnvironmentsPage.qml", "BackupsPage.qml", "ActivityPage.qml", "SettingsPage.qml"
     ]
+
+    Binding { target: Theme; property: "mode"; value: controller.themeMode }
 
     function showPage(index) {
         if (index < 0 || index >= pageSources.length || currentPage === index)
@@ -139,6 +150,7 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+Shift+Tab"; context: Qt.ApplicationShortcut; onActivated: window.cyclePage(-1) }
     Shortcut { sequence: "Ctrl+L"; context: Qt.ApplicationShortcut; onActivated: window.showPage(6) }
     Shortcut { sequence: "Ctrl+Shift+L"; context: Qt.ApplicationShortcut; onActivated: window.showPage(3) }
+    Shortcut { sequence: "Ctrl+,"; context: Qt.ApplicationShortcut; onActivated: window.showPage(7) }
 
     RowLayout {
         anchors.fill: parent
@@ -208,6 +220,7 @@ ApplicationWindow {
                             ToolTip.text: navEntry.modelData.title + "\n" + navEntry.modelData.description
                             Accessible.name: navEntry.modelData.title
                             onClicked: window.showPage(navEntry.index)
+                            HoverHandler { cursorShape: Qt.ArrowCursor }
 
                             contentItem: RowLayout {
                                 spacing: 10

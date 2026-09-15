@@ -94,6 +94,7 @@ def test_deb_package_declares_qt_glib_runtime():
     packaging = (ROOT / "scripts/package_linux.py").read_text(encoding="utf-8")
 
     assert "libglib2.0-0" in packaging
+    assert "python3" in packaging
 
 
 def test_release_workflow_builds_and_smokes_arch_package():
@@ -105,5 +106,6 @@ def test_release_workflow_builds_and_smokes_arch_package():
     assert "*.pkg.tar.zst" in workflow
     assert "makepkg --nodeps --noconfirm --cleanbuild" in packaging
     assert "pkgname=runexe-bin" in packaging
+    assert "'python'" in packaging
     assert "$startdir/runexe/." in packaging
     assert "$srcdir/runexe/." not in packaging

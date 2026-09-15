@@ -86,11 +86,17 @@ def test_installs_managed_ge_proton_from_mocked_release(tmp_path, monkeypatch):
 
     monkeypatch.setattr("runexe.proton._download_file", download)
 
-    installation = install_managed_proton(tmp_path / "managed")
+    progress = []
+    installation = install_managed_proton(
+        tmp_path / "managed", progress=lambda label, value: progress.append((label, value))
+    )
 
     assert installation.name == "GE-Proton10-20"
     assert installation.script == (tmp_path / "managed" / "GE-Proton10-20" / "proton").resolve()
     assert installation.script.read_bytes() == b"#!/bin/sh\n"
+    assert progress[0][1] == 5
+    assert any("Downloading" in label for label, _value in progress)
+    assert progress[-1][1] == 100
 
 
 def test_managed_proton_rejects_archive_path_traversal(tmp_path, monkeypatch):

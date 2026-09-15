@@ -62,3 +62,25 @@ def test_opens_proton_control_panel_with_recorded_runtime(tmp_path, monkeypatch)
 
     assert seen["command"] == [str(script), "runinprefix", "control"]
     assert seen["env"]["STEAM_COMPAT_DATA_PATH"] == str(item.path)
+
+
+def test_opens_ge_proton_control_panel_through_umu(tmp_path, monkeypatch):
+    script = tmp_path / "GE-Proton11-6" / "proton"
+    script.parent.mkdir()
+    script.touch()
+    item = environment(tmp_path / "compat", "proton", str(script))
+    installation = ProtonInstallation("GE-Proton11-6", script, "11-6", tmp_path / "Steam")
+    seen = {}
+    monkeypatch.setattr("runexe.configuration.select_proton", lambda _path: installation)
+    monkeypatch.setattr("runexe.configuration.ensure_umu_launcher", lambda: "/usr/bin/umu-run")
+    monkeypatch.setattr(
+        "runexe.configuration.subprocess.Popen",
+        lambda command, **kwargs: seen.update(command=command, **kwargs),
+    )
+
+    open_environment_configuration(item, "control")
+
+    assert seen["command"] == ["/usr/bin/umu-run", "control"]
+    assert seen["env"]["WINEPREFIX"] == str(item.path / "pfx")
+    assert seen["env"]["PROTONPATH"] == str(script.parent)
+    assert seen["env"]["PROTON_VERB"] == "runinprefix"

@@ -21,6 +21,7 @@ from .proton import (
     proton_winetricks_environment,
     select_proton,
 )
+from .umu import UmuError, ensure_umu_launcher, requires_umu, umu_environment
 
 RUNEXE_DATA_DIR = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share")) / "runexe"
 PREFIXES_DIR = RUNEXE_DATA_DIR / "prefixes"
@@ -349,17 +350,29 @@ def ensure_proton_prefix(
 ) -> None:
     """Initialize an isolated Proton compat-data directory once."""
 
+    umu: str | None = None
+    if requires_umu(installation):
+        try:
+            umu = ensure_umu_launcher()
+        except UmuError as error:
+            raise RunnerError(f"Could not prepare UMU for GE-Proton: {error}") from error
+
     prefix = compat_data / "pfx"
     if (prefix / "drive_c").is_dir():
         _verbose(verbose, f"Reusing Proton compat data: {compat_data}")
         return
 
     compat_data.mkdir(parents=True, exist_ok=True)
-    command = [str(installation.script), "run", "cmd.exe", "/c", "exit"]
+    if umu is not None:
+        command = [umu, "cmd.exe", "/c", "exit"]
+        env = umu_environment(installation, compat_data, executable)
+    else:
+        command = [str(installation.script), "run", "cmd.exe", "/c", "exit"]
+        env = proton_environment(installation, compat_data, executable)
     try:
         result = run_with_progress(
             command,
-            env=proton_environment(installation, compat_data, executable),
+            env=env,
             description=f"Initializing {installation.name}",
             timeout=PROTON_INIT_TIMEOUT,
             verbose=verbose,
@@ -392,11 +405,25 @@ def set_proton_windows_version(
         raise RunnerError(
             f"Unsupported Windows version '{winver}'. Supported versions: 7, 8, 8.1, 10, 11."
         )
-    command = [str(installation.script), "runinprefix", "winecfg", "-v", selected]
+    if requires_umu(installation):
+        try:
+            umu = ensure_umu_launcher()
+        except UmuError as error:
+            raise RunnerError(f"Could not prepare UMU for GE-Proton: {error}") from error
+        command = [umu, "winecfg", "-v", selected]
+        env = umu_environment(
+            installation,
+            compat_data,
+            executable,
+            verb="runinprefix",
+        )
+    else:
+        command = [str(installation.script), "runinprefix", "winecfg", "-v", selected]
+        env = proton_environment(installation, compat_data, executable)
     try:
         result = run_with_progress(
             command,
-            env=proton_environment(installation, compat_data, executable),
+            env=env,
             description=f"Configuring Proton for Windows {normalized}",
             timeout=60,
             verbose=verbose,
@@ -583,8 +610,21 @@ def open_runtime_configuration(
 
     if prepared.proton_installation is not None:
         installation = prepared.proton_installation
-        command = [str(installation.script), "runinprefix", "winecfg"]
-        env = proton_environment(installation, prepared.path, executable_path)
+        if requires_umu(installation):
+            try:
+                umu = ensure_umu_launcher()
+            except UmuError as error:
+                raise RunnerError(f"Could not prepare UMU for GE-Proton: {error}") from error
+            command = [umu, "winecfg"]
+            env = umu_environment(
+                installation,
+                prepared.path,
+                executable_path,
+                verb="runinprefix",
+            )
+        else:
+            command = [str(installation.script), "runinprefix", "winecfg"]
+            env = proton_environment(installation, prepared.path, executable_path)
     else:
         command = _wine_tool_command("winecfg")
         env = _wine_env(prepared.path, prepared.wine_arch)
@@ -606,13 +646,26 @@ def build_launch_spec(
     executable_path = executable.path.resolve()
     if prepared.proton_installation is not None:
         installation = prepared.proton_installation
-        command = [str(installation.script), "run", str(executable_path), *(extra_args or [])]
-        env = proton_environment(
-            installation,
-            prepared.path,
-            executable_path,
-            prepared.proton_tuning,
-        )
+        if requires_umu(installation):
+            try:
+                umu = ensure_umu_launcher()
+            except UmuError as error:
+                raise RunnerError(f"Could not prepare UMU for GE-Proton: {error}") from error
+            command = [umu, str(executable_path), *(extra_args or [])]
+            env = umu_environment(
+                installation,
+                prepared.path,
+                executable_path,
+                prepared.proton_tuning,
+            )
+        else:
+            command = [str(installation.script), "run", str(executable_path), *(extra_args or [])]
+            env = proton_environment(
+                installation,
+                prepared.path,
+                executable_path,
+                prepared.proton_tuning,
+            )
     else:
         command = [prepared.launcher, str(executable_path), *(extra_args or [])]
         env = _wine_env(prepared.path, prepared.wine_arch)

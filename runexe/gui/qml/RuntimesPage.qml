@@ -61,6 +61,68 @@ Flickable {
                     enabled: controller.interactionEnabled
                     onClicked: controller.installVulkanTools()
                 }
+                ColumnLayout {
+                    Layout.fillWidth: true
+                    Layout.columnSpan: root.width >= 760 ? 2 : 1
+                    visible: controller.taskProgressVisible
+                    spacing: 7
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Text {
+                            Layout.fillWidth: true
+                            text: controller.taskProgressLabel
+                            color: Theme.text
+                            font.pixelSize: 11
+                            elide: Text.ElideRight
+                        }
+                        Text {
+                            text: controller.taskProgressIndeterminate ? "Working…" : controller.taskProgressValue + "%"
+                            color: Theme.textMuted
+                            font.pixelSize: 11
+                        }
+                    }
+
+                    Item {
+                        id: installProgress
+                        objectName: "runtimeInstallProgress"
+                        Layout.fillWidth: true
+                        implicitHeight: 8
+                        clip: true
+
+                        Rectangle {
+                            anchors.fill: parent
+                            radius: height / 2
+                            color: Theme.field
+                            border.color: Theme.borderSoft
+                        }
+                        Rectangle {
+                            visible: !controller.taskProgressIndeterminate
+                            width: parent.width * Math.max(0, Math.min(100, controller.taskProgressValue)) / 100
+                            height: parent.height
+                            radius: height / 2
+                            color: Theme.accent
+                            Behavior on width { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
+                        }
+                        Rectangle {
+                            id: indeterminateBar
+                            visible: controller.taskProgressIndeterminate
+                            width: Math.max(48, parent.width * 0.28)
+                            height: parent.height
+                            radius: height / 2
+                            color: Theme.accent
+                            x: -width
+                            NumberAnimation on x {
+                                running: indeterminateBar.visible
+                                loops: Animation.Infinite
+                                from: -indeterminateBar.width
+                                to: installProgress.width
+                                duration: 950
+                                easing.type: Easing.InOutQuad
+                            }
+                        }
+                    }
+                }
             }
         }
     }

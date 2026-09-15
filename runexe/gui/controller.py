@@ -67,6 +67,7 @@ from runexe.runner import (
     open_runtime_configuration,
     prepare_environment,
 )
+from runexe.umu import ensure_umu_launcher
 
 from .workers import Worker
 
@@ -212,6 +213,7 @@ class RunEXEController(QObject):
     PAGE_ENVIRONMENTS = 4
     PAGE_BACKUPS = 5
     PAGE_ACTIVITY = 6
+    PAGE_SETTINGS = 7
 
     stateChanged = Signal()
     navigateRequested = Signal(int)
@@ -219,6 +221,7 @@ class RunEXEController(QObject):
     messageRequested = Signal(str, str, str)
     notificationRequested = Signal(str, str)
     closeConfirmationRequested = Signal()
+    taskProgressRequested = Signal(str, str, int)
 
     def __init__(
         self,
@@ -234,6 +237,7 @@ class RunEXEController(QObject):
         self.auto_refresh = auto_refresh
         self.thread_pool = QThreadPool.globalInstance()
         self._workers: dict[str, Worker] = {}
+        self.taskProgressRequested.connect(self._task_progress_requested)
 
         self.source_path: Path | None = None
         self.executable: ExecutableInfo | None = None
@@ -268,9 +272,15 @@ class RunEXEController(QObject):
             self._dependencies = "auto"
         self._prefix = ""
         self._arguments = ""
+        self._theme_mode = str(self.settings.value("application/theme", "system") or "system")
+        if self._theme_mode not in {"system", "light", "dark"}:
+            self._theme_mode = "system"
         self._notifications_enabled = bool(
             self.settings.value("notifications/enabled", True, type=bool)
         )
+        self._task_progress_key = ""
+        self._task_progress_label = ""
+        self._task_progress_value = -1
         self.settings.remove("runtime/prefix")
 
         self._file_metric = _metric("Not analyzed", "Select Windows software to begin")
@@ -421,6 +431,22 @@ class RunEXEController(QObject):
     def taskStatus(self) -> str:
         return self._task_status
 
+    @Property(bool, notify=stateChanged)
+    def taskProgressVisible(self) -> bool:
+        return bool(self._task_progress_key and self._task_progress_key in self._workers)
+
+    @Property(str, notify=stateChanged)
+    def taskProgressLabel(self) -> str:
+        return self._task_progress_label
+
+    @Property(int, notify=stateChanged)
+    def taskProgressValue(self) -> int:
+        return max(0, self._task_progress_value)
+
+    @Property(bool, notify=stateChanged)
+    def taskProgressIndeterminate(self) -> bool:
+        return self._task_progress_value < 0
+
     @Property(str, notify=stateChanged)
     def environmentStatus(self) -> str:
         return self._environment_status
@@ -456,6 +482,18 @@ class RunEXEController(QObject):
     @Property(bool, notify=stateChanged)
     def notificationsEnabled(self) -> bool:
         return self._notifications_enabled
+
+    @Property(str, notify=stateChanged)
+    def themeMode(self) -> str:
+        return self._theme_mode
+
+    @Property("QVariantList", constant=True)
+    def themeOptions(self) -> list[dict[str, str]]:
+        return [
+            {"label": "System", "value": "system"},
+            {"label": "Light", "value": "light"},
+            {"label": "Dark", "value": "dark"},
+        ]
 
     @Property("QVariantMap", notify=stateChanged)
     def wineMetric(self) -> dict[str, str]:
@@ -599,6 +637,14 @@ class RunEXEController(QObject):
     def setNotificationsEnabled(self, enabled: bool) -> None:
         self._notifications_enabled = enabled
         self.settings.setValue("notifications/enabled", enabled)
+        self.stateChanged.emit()
+
+    @Slot(str)
+    def setThemeMode(self, value: str) -> None:
+        if value not in {"system", "light", "dark"} or value == self._theme_mode:
+            return
+        self._theme_mode = value
+        self.settings.setValue("application/theme", value)
         self.stateChanged.emit()
 
     @Property(str, notify=stateChanged)
@@ -1024,10 +1070,25 @@ class RunEXEController(QObject):
     def installProton(self) -> None:
         if self._action_blocked():
             return
+        self._prepare_task_progress("install-proton", "Starting GE-Proton installation", 0)
+
+        def install_runtime() -> ProtonInstallation:
+            report = self._progress_callback("install-proton")
+
+            def proton_progress(label: str, value: int | None) -> None:
+                report(label, None if value is None else int(value * 0.8))
+
+            def umu_progress(label: str, value: int | None) -> None:
+                report(label, None if value is None else 80 + int(value * 0.2))
+
+            installation = install_managed_proton(progress=proton_progress)
+            ensure_umu_launcher(progress=umu_progress)
+            return installation
+
         self._start_task(
             "install-proton",
-            "Installing the latest GE-Proton runtime",
-            install_managed_proton,
+            "Installing GE-Proton and its UMU launcher",
+            install_runtime,
             self._managed_proton_installed,
         )
 
@@ -1043,10 +1104,13 @@ class RunEXEController(QObject):
     def installVulkanTools(self) -> None:
         if self._action_blocked():
             return
+        self._prepare_task_progress("install-vulkan", "Starting Vulkan tools installation", 0)
         self._start_task(
             "install-vulkan",
             "Installing Vulkan tools",
-            lambda: install_system_component("vulkan"),
+            lambda: install_system_component(
+                "vulkan", progress=self._progress_callback("install-vulkan")
+            ),
             self._vulkan_tools_installed,
         )
 
@@ -1881,6 +1945,26 @@ class RunEXEController(QObject):
         self.navigateRequested.emit(page)
 
     # ------------------------------------------------------------- Background tasks
+    def _prepare_task_progress(self, key: str, label: str, value: int = -1) -> None:
+        self._task_progress_key = key
+        self._task_progress_label = label
+        self._task_progress_value = value
+
+    def _progress_callback(self, key: str):
+        def report(label: str, value: int | None = None) -> None:
+            self.taskProgressRequested.emit(key, label, -1 if value is None else int(value))
+
+        return report
+
+    @Slot(str, str, int)
+    def _task_progress_requested(self, key: str, label: str, value: int) -> None:
+        if key not in self._workers:
+            return
+        self._task_progress_key = key
+        self._task_progress_label = label
+        self._task_progress_value = -1 if value < 0 else max(0, min(100, value))
+        self.stateChanged.emit()
+
     def _start_task(self, key: str, label: str, function, on_result) -> None:
         if key in self._workers:
             message = f"{label} is already running"
@@ -1908,6 +1992,10 @@ class RunEXEController(QObject):
 
     def _task_finished(self, key: str) -> None:
         self._workers.pop(key, None)
+        if key == self._task_progress_key:
+            self._task_progress_key = ""
+            self._task_progress_label = ""
+            self._task_progress_value = -1
         if not self._workers and self._task_status not in {
             "Activity copied to clipboard",
             "Activity cleared",

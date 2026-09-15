@@ -10,6 +10,7 @@ import shutil
 import tarfile
 import tempfile
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -283,19 +284,38 @@ def _latest_ge_proton_asset() -> tuple[str, str]:
     raise ProtonError("The latest GE-Proton release does not contain a .tar.gz runtime asset.")
 
 
-def _download_file(url: str, destination: Path, *, max_bytes: int = 4 * 1024**3) -> None:
+def _download_file(
+    url: str,
+    destination: Path,
+    *,
+    max_bytes: int = 4 * 1024**3,
+    progress: Callable[[int, int | None], None] | None = None,
+) -> None:
     request = urllib.request.Request(url, headers={"User-Agent": "RunEXE"})
     try:
         with (
             urllib.request.urlopen(request, timeout=60) as response,
             destination.open("wb") as output,
         ):
+            expected: int | None = None
+            content_length = response.headers.get("Content-Length")
+            if content_length:
+                try:
+                    parsed_length = int(content_length)
+                except ValueError:
+                    parsed_length = 0
+                if parsed_length > 0:
+                    expected = parsed_length
             total = 0
+            if progress is not None:
+                progress(total, expected)
             while chunk := response.read(1024 * 1024):
                 total += len(chunk)
                 if total > max_bytes:
                     raise ProtonError("GE-Proton download exceeded the safety size limit.")
                 output.write(chunk)
+                if progress is not None:
+                    progress(total, expected)
     except ProtonError:
         raise
     except OSError as error:
@@ -344,10 +364,16 @@ def _extract_ge_proton(archive: Path, destination: Path) -> Path:
     return roots[0]
 
 
-def install_managed_proton(destination_root: Path | None = None) -> ProtonInstallation:
+def install_managed_proton(
+    destination_root: Path | None = None,
+    *,
+    progress: Callable[[str, int | None], None] | None = None,
+) -> ProtonInstallation:
     """Install the latest official GE-Proton release into RunEXE's user data directory."""
 
     root = (destination_root or managed_proton_root()).expanduser().resolve()
+    if progress is not None:
+        progress("Step 1 of 5 · Checking the latest GE-Proton release", 5)
     tag, asset_url = _latest_ge_proton_asset()
     root.mkdir(parents=True, exist_ok=True)
 
@@ -355,6 +381,8 @@ def install_managed_proton(destination_root: Path | None = None) -> ProtonInstal
     if existing.is_dir():
         installation = _from_script(existing / "proton", root)
         if installation:
+            if progress is not None:
+                progress(f"{tag} is already installed", 100)
             return installation
 
     with tempfile.TemporaryDirectory(prefix=".runexe-proton-", dir=root) as temporary:
@@ -362,14 +390,40 @@ def install_managed_proton(destination_root: Path | None = None) -> ProtonInstal
         archive = staging / "ge-proton.tar.gz"
         extracted = staging / "extracted"
         extracted.mkdir()
-        _download_file(asset_url, archive)
+        if progress is not None:
+            progress(f"Step 2 of 5 · Downloading {tag}", 15)
+        last_download_percent = -1
+
+        def download_progress(received: int, expected: int | None) -> None:
+            nonlocal last_download_percent
+            if progress is None:
+                return
+            if expected:
+                fraction = min(1.0, received / expected)
+                current = 15 + int(fraction * 50)
+                detail = f"{received / 1024**2:.0f} / {expected / 1024**2:.0f} MiB"
+            else:
+                current = 35
+                detail = f"{received / 1024**2:.0f} MiB"
+            if current == last_download_percent:
+                return
+            last_download_percent = current
+            progress(f"Step 2 of 5 · Downloading {tag} · {detail}", current)
+
+        _download_file(asset_url, archive, progress=download_progress)
+        if progress is not None:
+            progress(f"Step 3 of 5 · Verifying and extracting {tag}", 70)
         install_dir = _extract_ge_proton(archive, extracted)
         final = root / tag
         if final.exists():
             installation = _from_script(final / "proton", root)
             if installation:
+                if progress is not None:
+                    progress(f"{tag} is ready", 100)
                 return installation
             raise ProtonError(f"Managed Proton destination already exists but is invalid: {final}")
+        if progress is not None:
+            progress(f"Step 4 of 5 · Finalizing {tag}", 90)
         try:
             install_dir.replace(final)
         except OSError as error:
@@ -379,6 +433,8 @@ def install_managed_proton(destination_root: Path | None = None) -> ProtonInstal
     if installation is None:
         shutil.rmtree(final, ignore_errors=True)
         raise ProtonError("The installed GE-Proton runtime is not runnable.")
+    if progress is not None:
+        progress(f"Step 5 of 5 · {tag} is ready", 100)
     return installation
 
 
