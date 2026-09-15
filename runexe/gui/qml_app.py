@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -14,6 +15,11 @@ from .controller import RunEXEController
 from .notifications import DesktopNotifier
 
 _live_engines: list[tuple[QQmlApplicationEngine, RunEXEController]] = []
+_VMWARE_DMI_PATHS = (
+    Path("/sys/class/dmi/id/product_name"),
+    Path("/sys/class/dmi/id/sys_vendor"),
+    Path("/sys/class/dmi/id/board_vendor"),
+)
 
 
 def _qml_path() -> Path:
@@ -24,15 +30,38 @@ def _asset_path() -> Path:
     return Path(__file__).resolve().parent.parent / "assets" / "runexe-logo.png"
 
 
+def _running_in_vmware() -> bool:
+    """Return whether Linux DMI data identifies this machine as a VMware guest."""
+
+    for path in _VMWARE_DMI_PATHS:
+        try:
+            if "vmware" in path.read_text(encoding="utf-8", errors="ignore").lower():
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def _use_qt_fallback_dialogs() -> bool:
+    """Choose the Qt fallback only where native Linux dialogs are known to misbehave."""
+
+    preference = os.environ.get("RUNEXE_DIALOG_BACKEND", "auto").strip().lower()
+    if preference == "qt":
+        return True
+    if preference == "native":
+        return False
+    return _running_in_vmware()
+
+
 def _configure_application(app: QGuiApplication) -> None:
     """Apply RunEXE-wide application metadata and lifecycle policy."""
 
-    # Native Linux file dialogs can take an exclusive pointer grab under some
-    # X11/VM setups (notably VMware), causing the cursor to be warped back into
-    # the dialog as the user tries to leave it.  Qt Quick Dialogs has its own
-    # fallback implementation, which avoids that platform-level mouse grab.
-    # Set the attribute before Main.qml creates any FileDialog/FolderDialog.
-    if sys.platform.startswith("linux"):
+    # VMware/X11 native dialogs can take an exclusive pointer grab and warp the
+    # cursor back into the picker. Keep the Qt fallback for those guests only.
+    # Normal Linux desktops (including Arch/KDE/GNOME) should use their native
+    # platform/portal picker, which integrates much better with the desktop.
+    # RUNEXE_DIALOG_BACKEND=qt|native can override auto-detection for debugging.
+    if sys.platform.startswith("linux") and _use_qt_fallback_dialogs():
         QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_DontUseNativeDialogs, True)
 
     # RunEXE owns its close policy explicitly through Main.qml -> requestClose().

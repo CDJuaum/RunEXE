@@ -43,16 +43,32 @@ def test_application_uses_explicit_close_policy(qt_app):
         qt_app.setQuitOnLastWindowClosed(previous)
 
 
-def test_linux_application_disables_native_dialogs(qt_app, monkeypatch):
+def test_linux_vmware_application_disables_native_dialogs(qt_app, monkeypatch):
     attribute = Qt.ApplicationAttribute.AA_DontUseNativeDialogs
     previous = QCoreApplication.testAttribute(attribute)
     try:
         QCoreApplication.setAttribute(attribute, False)
         monkeypatch.setattr(sys, "platform", "linux")
+        monkeypatch.setattr("runexe.gui.qml_app._use_qt_fallback_dialogs", lambda: True)
 
         _configure_application(qt_app)
 
         assert QCoreApplication.testAttribute(attribute) is True
+    finally:
+        QCoreApplication.setAttribute(attribute, previous)
+
+
+def test_linux_desktop_keeps_native_dialogs(qt_app, monkeypatch):
+    attribute = Qt.ApplicationAttribute.AA_DontUseNativeDialogs
+    previous = QCoreApplication.testAttribute(attribute)
+    try:
+        QCoreApplication.setAttribute(attribute, False)
+        monkeypatch.setattr(sys, "platform", "linux")
+        monkeypatch.setattr("runexe.gui.qml_app._use_qt_fallback_dialogs", lambda: False)
+
+        _configure_application(qt_app)
+
+        assert QCoreApplication.testAttribute(attribute) is False
     finally:
         QCoreApplication.setAttribute(attribute, previous)
 
