@@ -105,3 +105,5 @@ def test_release_workflow_builds_and_smokes_arch_package():
     assert "*.pkg.tar.zst" in workflow
     assert "makepkg --nodeps --noconfirm --cleanbuild" in packaging
     assert "pkgname=runexe-bin" in packaging
+    assert "$startdir/runexe/." in packaging
+    assert "$srcdir/runexe/." not in packaging

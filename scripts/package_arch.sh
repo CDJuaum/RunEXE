@@ -48,7 +48,9 @@ options=('!strip')
 package() {
   install -d "\$pkgdir/opt/runexe" "\$pkgdir/usr/bin" \
     "\$pkgdir/usr/share/applications" "\$pkgdir/usr/share/icons/hicolor/256x256/apps"
-  cp -a "\$srcdir/runexe/." "\$pkgdir/opt/runexe/"
+  # The prebuilt bundle sits next to PKGBUILD. makepkg --cleanbuild clears its
+  # own srcdir before package(), so do not stage this source inside $srcdir.
+  cp -a "\$startdir/runexe/." "\$pkgdir/opt/runexe/"
   ln -s /opt/runexe/runexe "\$pkgdir/usr/bin/runexe"
   ln -s /opt/runexe/runexe-gui "\$pkgdir/usr/bin/runexe-gui"
   install -Dm644 /dev/stdin "\$pkgdir/usr/share/applications/runexe.desktop" <<'DESKTOP'
@@ -63,7 +65,7 @@ Categories=Utility;
 MimeType=application/x-ms-dos-executable;application/vnd.microsoft.portable-executable;
 StartupWMClass=RunEXE
 DESKTOP
-  install -Dm644 "\$srcdir/runexe/runexe-logo.png" \
+  install -Dm644 "\$startdir/runexe/runexe-logo.png" \
     "\$pkgdir/usr/share/icons/hicolor/256x256/apps/runexe.png"
 }
 EOF
