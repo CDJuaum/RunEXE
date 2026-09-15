@@ -2,6 +2,14 @@
 
 All notable RunEXE changes are documented here.
 
+## [1.1.1] - 2026-09-15
+
+### Added
+
+- The Runtimes page now exposes a dedicated **Install UMU Launcher** action beside the existing
+  Proton and Vulkan setup controls. The action uses RunEXE's managed UMU installer, reports progress,
+  refreshes runtime detection when finished, and surfaces completion in activity/status notifications.
+
 ## [1.1.0] - 2026-09-15
 
 ### Added

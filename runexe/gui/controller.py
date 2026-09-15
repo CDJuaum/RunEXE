@@ -1101,6 +1101,29 @@ class RunEXEController(QObject):
         self.stateChanged.emit()
 
     @Slot()
+    def installUmuLauncher(self) -> None:
+        if self._action_blocked():
+            return
+        self._prepare_task_progress("install-umu", "Starting UMU Launcher installation", 0)
+        self._start_task(
+            "install-umu",
+            "Installing UMU Launcher",
+            lambda: ensure_umu_launcher(progress=self._progress_callback("install-umu")),
+            self._umu_launcher_installed,
+        )
+
+    def _umu_launcher_installed(self, executable: str) -> None:
+        self._log(f"UMU Launcher ready: {executable}")
+        self._task_status = "UMU Launcher installed"
+        self._set_header_status("UMU Launcher installed", "ready")
+        self._notify(
+            "UMU Launcher installed",
+            "GE-Proton can now launch outside Steam through UMU.",
+        )
+        QTimer.singleShot(0, self.refreshRuntimes)
+        self.stateChanged.emit()
+
+    @Slot()
     def installVulkanTools(self) -> None:
         if self._action_blocked():
             return

@@ -162,6 +162,7 @@ def test_settings_and_runtime_progress_surfaces_are_available(qt_app, tmp_path):
     root.showPage(controller.PAGE_RUNTIMES)
     qt_app.processEvents()
     assert root.findChild(QQuickItem, "runtimeInstallProgress") is not None
+    assert root.findChild(QQuickItem, "installUmuButton") is not None
 
     root.close()
     engine.deleteLater()

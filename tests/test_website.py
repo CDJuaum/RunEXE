@@ -35,7 +35,7 @@ def test_homepage_software_application_schema_matches_release():
     app = next(item for item in data["@graph"] if item["@type"] == "SoftwareApplication")
 
     assert app["name"] == "RunEXE"
-    assert app["softwareVersion"] == "1.1.0"
+    assert app["softwareVersion"] == "1.1.1"
     assert app["operatingSystem"] == "Linux"
     assert app["applicationCategory"] == "UtilitiesApplication"
     assert app["offers"]["price"] == "0"

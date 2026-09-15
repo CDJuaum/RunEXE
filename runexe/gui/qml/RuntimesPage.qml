@@ -38,12 +38,12 @@ Flickable {
             }
             GridLayout {
                 Layout.fillWidth: true
-                columns: root.width >= 760 ? 2 : 1
+                columns: root.width >= 760 ? 3 : 1
                 columnSpacing: 10
                 rowSpacing: 10
                 AppButton {
                     Layout.fillWidth: true
-                    Layout.columnSpan: root.width >= 760 ? 2 : 1
+                    Layout.columnSpan: root.width >= 760 ? 3 : 1
                     text: "Refresh detection"
                     primary: true
                     enabled: controller.interactionEnabled
@@ -56,6 +56,14 @@ Flickable {
                     onClicked: controller.installProton()
                 }
                 AppButton {
+                    id: installUmuButton
+                    objectName: "installUmuButton"
+                    Layout.fillWidth: true
+                    text: "Install UMU Launcher"
+                    enabled: controller.interactionEnabled
+                    onClicked: controller.installUmuLauncher()
+                }
+                AppButton {
                     Layout.fillWidth: true
                     text: "Install Vulkan tools"
                     enabled: controller.interactionEnabled
@@ -63,7 +71,7 @@ Flickable {
                 }
                 ColumnLayout {
                     Layout.fillWidth: true
-                    Layout.columnSpan: root.width >= 760 ? 2 : 1
+                    Layout.columnSpan: root.width >= 760 ? 3 : 1
                     visible: controller.taskProgressVisible
                     spacing: 7
 

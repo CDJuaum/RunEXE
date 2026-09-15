@@ -261,14 +261,16 @@ def test_runtime_provisioning_actions_use_background_hooks(qt_app, tmp_path, mon
 
     monkeypatch.setattr(controller, "_start_task", run_task)
     controller.installProton()
+    controller.installUmuLauncher()
     controller.installVulkanTools()
     qt_app.processEvents()
 
-    assert [key for key, _label in tasks] == ["install-proton", "install-vulkan"]
-    assert umu_installs == [True]
+    assert [key for key, _label in tasks] == ["install-proton", "install-umu", "install-vulkan"]
+    assert umu_installs == [True, True]
     assert vulkan_components == ["vulkan"]
-    assert refreshes == [True, True]
+    assert refreshes == [True, True, True]
     assert "Managed Proton ready" in controller.activityText
+    assert "UMU Launcher ready" in controller.activityText
     assert "Vulkan tools installation completed" in controller.activityText
 
 
