@@ -2,6 +2,17 @@
 
 All notable RunEXE changes are documented here.
 
+## [0.9.4] - 2026-09-15
+
+### Added
+
+- Linux releases now include a native Arch Linux `runexe-bin` package (`.pkg.tar.zst`) built from
+  the tested glibc desktop bundle. The release workflow installs it with `pacman` in a clean Arch
+  container and launches both the CLI and Qt desktop app before publishing the release.
+- The RunEXE project website is now maintained in `website/`, with responsive product and download
+  pages, a privacy/cookie notice, restrictive browser security headers, and no analytics or
+  non-essential cookies.
+
 ## [0.9.3] - 2026-09-13
 
 ### Fixed

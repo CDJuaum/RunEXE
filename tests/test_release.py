@@ -94,3 +94,14 @@ def test_deb_package_declares_qt_glib_runtime():
     packaging = (ROOT / "scripts/package_linux.py").read_text(encoding="utf-8")
 
     assert "libglib2.0-0" in packaging
+
+
+def test_release_workflow_builds_and_smokes_arch_package():
+    workflow = (ROOT / ".github/workflows/release-linux.yml").read_text(encoding="utf-8")
+    packaging = (ROOT / "scripts/package_arch.sh").read_text(encoding="utf-8")
+
+    assert "archlinux:base-devel" in workflow
+    assert "archlinux:latest" in workflow
+    assert "*.pkg.tar.zst" in workflow
+    assert "makepkg --nodeps --noconfirm --cleanbuild" in packaging
+    assert "pkgname=runexe-bin" in packaging

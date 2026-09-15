@@ -10,6 +10,7 @@ on:
       - 'scripts/build_linux.sh'
       - 'scripts/frozen_entry.py'
       - 'scripts/package_linux.py'
+      - 'scripts/package_arch.sh'
       - 'tests/test_release.py'
       - 'pyproject.toml'
   workflow_dispatch:
@@ -141,9 +142,51 @@ jobs:
             test "$status" -eq 124
           '
 
+  arch:
+    needs: [source, build]
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.source.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-glibc
+          path: artifacts
+      - name: Build Arch Linux package from tested glibc bundle
+        run: |
+          archive="$(find artifacts -maxdepth 1 -type f -name '*linux-x86_64-glibc.tar.gz' -print -quit)"
+          test -n "$archive"
+          docker run --rm -v "$PWD:/src" -w /src archlinux:base-devel sh -ec '
+            pacman -Sy --noconfirm python
+            id builder >/dev/null 2>&1 || useradd -m builder
+            sh scripts/package_arch.sh "/src/'"$archive"'" /src/dist/arch
+          '
+      - name: Smoke-test Arch package in a clean install
+        run: |
+          docker run --rm -v "$PWD/dist/arch:/artifacts:ro" archlinux:latest sh -ec '
+            pacman -Sy --noconfirm
+            pacman -U --noconfirm /artifacts/*.pkg.tar.zst
+            runexe version
+            runexe --help
+            status=0
+            QT_QPA_PLATFORM=offscreen timeout 8s runexe-gui > /tmp/gui.log 2>&1 || status=$?
+            cat /tmp/gui.log
+            test "$status" -eq 124
+          '
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-arch
+          path: dist/arch/*.pkg.tar.zst
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
   publish:
     if: github.event_name != 'pull_request'
-    needs: [source, build, smoke]
+    needs: [source, build, smoke, arch]
     runs-on: ubuntu-22.04
     timeout-minutes: 10
     permissions:
@@ -170,7 +213,7 @@ jobs:
           BUILD_SHA: ${{ needs.source.outputs.sha }}
         working-directory: artifacts
         run: |
-          sha256sum ./*.tar.gz ./*.deb ./*.rpm > SHA256SUMS
+          sha256sum ./*.tar.gz ./*.deb ./*.rpm ./*.pkg.tar.zst > SHA256SUMS
           # Leave releases in draft until every asset is present. Never overwrite
           # a published release (including immutable releases) on a rerun.
           if gh release view "$TAG" --json isDraft > release.json 2>/dev/null; then
@@ -182,5 +225,5 @@ jobs:
             gh release create "$TAG" --verify-tag --draft --title "RunEXE $TAG" \
               --notes "Linux x86-64 builds from $BUILD_SHA. Desktop glibc (2.35+) and Alpine 3.22+ CLI (musl). Python is bundled; Wine/Proton and system graphics drivers are installed separately."
           fi
-          gh release upload "$TAG" ./*.tar.gz ./*.deb ./*.rpm SHA256SUMS --clobber
+          gh release upload "$TAG" ./*.tar.gz ./*.deb ./*.rpm ./*.pkg.tar.zst SHA256SUMS --clobber
           gh release edit "$TAG" --draft=false

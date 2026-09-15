@@ -133,6 +133,7 @@ the tag's GitHub release after tests and clean-distribution smoke checks pass:
 | `linux-x86_64-glibc.tar.gz` | glibc 2.35+ (Debian 12+, Ubuntu 22.04+, compatible distributions) | CLI, desktop GUI, Python, Qt |
 | `linux-x86_64-glibc.deb` | Debian / Ubuntu | Same bundle, menu entry, system dependency declarations |
 | `linux-x86_64-glibc.rpm` | Fedora / compatible RPM distributions with glibc 2.35+ | Same bundle and desktop integration |
+| `runexe-bin-*.pkg.tar.zst` | Arch Linux / Manjaro | Same glibc bundle packaged for pacman with desktop integration |
 | `linux-x86_64-musl.tar.gz` | Alpine 3.22+ | CLI and Python; no Qt GUI |
 
 Filenames also include the tag and a short tag hash. Native package versions come
@@ -144,7 +145,8 @@ libraries already installed. These downloads target x86-64, not ARM or 32-bit x8
 
 Extract a portable archive and run `./runexe/runexe --help` or
 `./runexe/runexe-gui`. Keep the entire directory together. Install native packages
-with `sudo apt install ./runexe-*.deb` or `sudo dnf install ./runexe-*.rpm`.
+with `sudo apt install ./runexe-*.deb`, `sudo dnf install ./runexe-*.rpm`, or
+`sudo pacman -U ./runexe-bin-*.pkg.tar.zst`.
 Verify downloads with `sha256sum -c SHA256SUMS` in a directory containing all
 release assets. Uninstalling a native package preserves per-user app state and
 Wine/Proton environments.
