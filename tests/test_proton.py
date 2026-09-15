@@ -7,6 +7,7 @@ import pytest
 from runexe.proton import (
     ProtonError,
     ProtonInstallation,
+    _latest_ge_proton_asset,
     discover_proton_installations,
     install_managed_proton,
     proton_environment,
@@ -65,6 +66,49 @@ def test_discovers_runexe_managed_proton(tmp_path, monkeypatch):
 
     assert [item.name for item in installations] == ["GE-Proton10-20"]
     assert installations[0].steam_root == managed.resolve()
+
+
+def test_discovery_ignores_architecture_specific_build_for_other_host(tmp_path, monkeypatch):
+    managed = tmp_path / "data" / "runexe" / "runtimes" / "proton"
+    for name in ("GE-Proton11-6-aarch64", "GE-Proton11-6-x86_64"):
+        install = managed / name
+        install.mkdir(parents=True)
+        script = install / "proton"
+        script.write_text("#!/bin/sh\n", encoding="utf-8")
+        script.chmod(0o755)
+
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "data"))
+    monkeypatch.setattr("runexe.proton._common_steam_roots", lambda: [])
+    monkeypatch.setattr("runexe.proton.platform.machine", lambda: "x86_64")
+
+    installations = discover_proton_installations()
+
+    assert [item.name for item in installations] == ["GE-Proton11-6-x86_64"]
+
+
+def test_latest_ge_proton_asset_matches_host_architecture(monkeypatch):
+    monkeypatch.setattr("runexe.proton.platform.machine", lambda: "x86_64")
+    monkeypatch.setattr(
+        "runexe.proton._github_json",
+        lambda _url: {
+            "tag_name": "GE-Proton11-6",
+            "assets": [
+                {
+                    "name": "GE-Proton11-6-aarch64.tar.gz",
+                    "browser_download_url": "https://example.invalid/arm.tar.gz",
+                },
+                {
+                    "name": "GE-Proton11-6-x86_64.tar.gz",
+                    "browser_download_url": "https://example.invalid/x86.tar.gz",
+                },
+            ],
+        },
+    )
+
+    release_name, url = _latest_ge_proton_asset()
+
+    assert release_name == "GE-Proton11-6-x86_64"
+    assert url == "https://example.invalid/x86.tar.gz"
 
 
 def test_installs_managed_ge_proton_from_mocked_release(tmp_path, monkeypatch):

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import platform
 import re
 import shutil
 import tarfile
@@ -174,6 +175,28 @@ def _from_script(script: Path, steam_root: Path) -> ProtonInstallation | None:
     )
 
 
+def _normalized_host_architecture() -> str:
+    machine = platform.machine().strip().lower()
+    aliases = {
+        "amd64": "x86_64",
+        "x64": "x86_64",
+        "arm64": "aarch64",
+    }
+    return aliases.get(machine, machine)
+
+
+def _installation_matches_host(installation: ProtonInstallation) -> bool:
+    """Reject architecture-specific Proton builds that do not match this host."""
+
+    label = f"{installation.name}-{installation.version or ''}".lower()
+    host = _normalized_host_architecture()
+    if re.search(r"(?:^|[-_.])(aarch64|arm64)(?:$|[-_.])", label):
+        return host == "aarch64"
+    if re.search(r"(?:^|[-_.])(x86_64|amd64|x64)(?:$|[-_.])", label):
+        return host == "x86_64"
+    return True
+
+
 def _version_key(installation: ProtonInstallation) -> tuple[int, tuple[int, ...], str]:
     label = f"{installation.name} {installation.version or ''}".lower()
     numbers = tuple(int(value) for value in re.findall(r"\d+", label))
@@ -235,7 +258,8 @@ def discover_proton_installations() -> list[ProtonInstallation]:
                 if installation:
                     installations[installation.script] = installation
 
-    return sorted(installations.values(), key=_version_key, reverse=True)
+    compatible = (item for item in installations.values() if _installation_matches_host(item))
+    return sorted(compatible, key=_version_key, reverse=True)
 
 
 def _github_json(url: str) -> dict[str, Any]:
@@ -266,6 +290,16 @@ def _latest_ge_proton_asset() -> tuple[str, str]:
     if not isinstance(tag, str) or not tag.strip() or not isinstance(assets, list):
         raise ProtonError("The latest GE-Proton release metadata is incomplete.")
 
+    host = _normalized_host_architecture()
+    if host == "x86_64":
+        architecture_suffix = "-x86_64.tar.gz"
+    elif host == "aarch64":
+        architecture_suffix = "-aarch64.tar.gz"
+    else:
+        raise ProtonError(
+            f"GE-Proton is not available for host architecture '{platform.machine() or host}'."
+        )
+
     for asset in assets:
         if not isinstance(asset, dict):
             continue
@@ -274,14 +308,16 @@ def _latest_ge_proton_asset() -> tuple[str, str]:
         if (
             isinstance(name, str)
             and isinstance(url, str)
-            and name.endswith(".tar.gz")
+            and name.endswith(architecture_suffix)
             and "sha512" not in name.lower()
         ):
-            normalized_tag = tag.strip()
-            if not re.fullmatch(r"[A-Za-z0-9._+-]+", normalized_tag):
-                raise ProtonError("The latest GE-Proton release tag is unsafe for a local path.")
-            return normalized_tag, url
-    raise ProtonError("The latest GE-Proton release does not contain a .tar.gz runtime asset.")
+            release_name = name[: -len(".tar.gz")]
+            if not re.fullmatch(r"[A-Za-z0-9._+-]+", release_name):
+                raise ProtonError("The latest GE-Proton release name is unsafe for a local path.")
+            return release_name, url
+    raise ProtonError(
+        f"The latest GE-Proton release does not contain a {host} runtime asset."
+    )
 
 
 def _download_file(
